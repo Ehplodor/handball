@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Handball Tactique Expert V8.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #0f172a; touch-action: none; font-family: 'Segoe UI', system-ui, sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body class="text-slate-200 select-none flex flex-col h-screen">
+
+    <!-- HEADER -->
+    <header class="bg-slate-900 border-b border-slate-700 p-3 shadow-lg flex justify-between items-center shrink-0 z-20">
+        <div>
+            <h1 class="text-xl font-black tracking-wide text-indigo-400">TACTIQUE <span class="text-white">V8.2</span></h1>
+            <p class="text-[10px] text-slate-400 uppercase tracking-widest">Filtres Multi-Sports</p>
+        </div>
+        <div class="flex gap-3">
+            <button id="teamsBtn" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow border border-slate-600 active:bg-slate-700 transition-colors flex items-center gap-2">
+                👥 Équipes
+            </button>
+            <label for="imageUpload" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow cursor-pointer active:bg-indigo-700 transition-colors flex items-center gap-2">
+                📷 Photo
+            </label>
+            <input type="file" id="imageUpload" accept="image/*" class="hidden">
+        </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <main class="flex-1 relative flex overflow-hidden">
+        
+        <!-- SIDEBAR GAUCHE (Correction du Z-Index z-[60] pour toujours être au-dessus de la map) -->
+        <aside id="sidebar" class="w-64 bg-slate-900 border-r border-slate-700 flex flex-col z-[60] transition-transform duration-300 transform -translate-x-full absolute h-full md:relative md:translate-x-0 shadow-2xl">
+            <div class="p-3 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+                <span class="font-bold text-sm uppercase tracking-wider text-slate-300">Banc de touche</span>
+                <button id="closeSidebarBtn" class="md:hidden text-slate-400 hover:text-white p-2">✕</button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <input type="color" id="colorTeamA" value="#ef4444" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent">
+                        <input type="text" id="nameTeamA" value="Locaux" class="bg-transparent border-b border-slate-600 text-sm font-bold text-white w-full focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div id="rosterA" class="grid grid-cols-2 gap-2"></div>
+                </div>
+                <div class="border-t border-slate-700"></div>
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <input type="color" id="colorTeamB" value="#3b82f6" class="w-6 h-6 rounded cursor-pointer border-0 bg-transparent">
+                        <input type="text" id="nameTeamB" value="Visiteurs" class="bg-transparent border-b border-slate-600 text-sm font-bold text-white w-full focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div id="rosterB" class="grid grid-cols-2 gap-2"></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- WORKSPACE (Canvas) -->
+        <div id="workspace" class="flex-1 relative bg-slate-950">
+            
+            <canvas id="mainCanvas" class="absolute inset-0 w-full h-full touch-none"></canvas>
+
+            <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-xl shadow-2xl flex gap-1 z-20 whitespace-nowrap">
+                <button id="modePanBtn" class="px-4 py-2 text-xs rounded-lg font-bold shadow text-white bg-slate-600 transition-colors">✋ Vue</button>
+                <button id="modeCalibBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">📍 Repères</button>
+                <button id="modePlayerBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">🏃 Joueurs</button>
+                <button id="mobileSidebarBtn" class="md:hidden px-4 py-2 text-xs rounded-lg bg-indigo-600 text-white font-bold ml-2">👥 Joueurs</button>
+            </div>
+
+            <!-- CARTE EN DIRECT -->
+            <div id="liveMapPanel" class="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-2xl shadow-2xl z-40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+                <div class="flex justify-between items-center mb-2 px-1">
+                    <span class="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Carte Active
+                    </span>
+                    <div class="flex gap-2 items-center">
+                        <button id="toggleProjBtn" class="text-indigo-400 hover:text-indigo-300" title="Activer Projection">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                        </button>
+                        <button id="flipMapBtn" class="text-slate-400 hover:text-white" title="Pivoter"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></button>
+                        <button id="expandMapBtn" class="text-slate-400 hover:text-white" title="Plein écran">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Panneau de Filtres (visible uniquement quand Modal Plein Écran) -->
+                <div id="mapControls" class="hidden flex-wrap gap-2 mb-2 p-2 border-b border-slate-700 bg-slate-800/80 justify-center rounded-lg">
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" id="chkHand" checked class="peer sr-only">
+                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-slate-200 peer-checked:text-slate-900 peer-checked:border-slate-200 font-bold transition-colors">Handball</span>
+                    </label>
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" id="chkBasket" class="peer sr-only">
+                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600 font-bold transition-colors">Basket</span>
+                    </label>
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" id="chkVolley" class="peer sr-only">
+                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 font-bold transition-colors">Volley</span>
+                    </label>
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" id="chkMinihand" class="peer sr-only">
+                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-yellow-500 peer-checked:text-white peer-checked:border-yellow-500 font-bold transition-colors">Mini-Hand</span>
+                    </label>
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" id="chkMinibasket" class="peer sr-only">
+                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-purple-500 peer-checked:text-white peer-checked:border-purple-500 font-bold transition-colors">Mini-Basket</span>
+                    </label>
+                </div>
+
+                <div id="mapContainerWrapper" class="relative w-[220px] h-[220px] rounded-xl overflow-hidden border border-slate-600 shadow-inner bg-[#e5a86d]">
+                    <canvas id="liveMapCanvas" class="absolute top-0 left-0 w-full h-full touch-none cursor-crosshair"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // ==========================================
+        // 1. DONNÉES MÉTIER & ÉTAT
+        // ==========================================
+        const ROSTER_TEMPLATE = [
+            { num: '1', role: 'Gardien' }, { num: '2', role: 'Ailier G' }, { num: '3', role: 'Arrière G' },
+            { num: '4', role: 'Demi-Centre' }, { num: '5', role: 'Pivot' }, { num: '6', role: 'Arrière D' }, { num: '7', role: 'Ailier D' }
+        ];
+
+        const state = {
+            image: null,
+            offscreenData: null, 
+            offscreenScale: 1,
+            view: { x: 0, y: 0, zoom: 1 },
+            mapView: { x: 0, y: 0, zoom: 1 }, 
+            mode: 'pan', 
+            isMapFlipped: false,
+            isMapExpanded: false, 
+            showProjection: true, 
+            raytraceDirty: true, 
+            
+            teams: { A: { name: 'Locaux', color: '#ef4444' }, B: { name: 'Visiteurs', color: '#3b82f6' } },
+            
+            visibleSports: { hand: true, basket: false, volley: false, minihand: false, minibasket: false },
+            
+            calibPoints: [
+                { id: 'c1', label: "1", photoX: 0, photoY: 0, mapX: 8.5, mapY: 0, offX: -40, offY: -40 },
+                { id: 'c2', label: "2", photoX: 0, photoY: 0, mapX: 11.5, mapY: 0, offX: 40, offY: -40 },
+                { id: 'c3', label: "3", photoX: 0, photoY: 0, mapX: 11.5, mapY: 6, offX: 40, offY: 40 },
+                { id: 'c4', label: "4", photoX: 0, photoY: 0, mapX: 8.5, mapY: 6, offX: -40, offY: 40 }
+            ],
+            
+            playersOnPitch: [],
+            dragPhoto: null,
+            dragMap: null,
+            pointersPhoto: new Map(),
+            pointersMap: new Map(),
+            transforms: { photoToMap: null, mapToPhoto: null, mapToPhotoMatrix: null }
+        };
+
+        // ==========================================
+        // 2. ÉLÉMENTS DOM & OPTIMISATION RAYTRACER
+        // ==========================================
+        const ui = {
+            mainCanvas: document.getElementById('mainCanvas'),
+            mapCanvas: document.getElementById('liveMapCanvas'),
+            liveMapPanel: document.getElementById('liveMapPanel'),
+            mapContainerWrapper: document.getElementById('mapContainerWrapper'),
+            mapControls: document.getElementById('mapControls'),
+            ctx: document.getElementById('mainCanvas').getContext('2d'),
+            mapCtx: document.getElementById('liveMapCanvas').getContext('2d'),
+            
+            modePan: document.getElementById('modePanBtn'),
+            modeCalib: document.getElementById('modeCalibBtn'),
+            modePlayer: document.getElementById('modePlayerBtn'),
+            
+            sidebar: document.getElementById('sidebar'),
+            teamsBtn: document.getElementById('teamsBtn'),
+            mobileSidebarBtn: document.getElementById('mobileSidebarBtn'),
+            closeSidebarBtn: document.getElementById('closeSidebarBtn'),
+            
+            flipMapBtn: document.getElementById('flipMapBtn'),
+            toggleProjBtn: document.getElementById('toggleProjBtn'),
+            expandMapBtn: document.getElementById('expandMapBtn')
+        };
+
+        const RAY_RES = 800; 
+        const rayCanvas = document.createElement('canvas');
+        rayCanvas.width = RAY_RES; rayCanvas.height = RAY_RES;
+        const rayCtx = rayCanvas.getContext('2d', { willReadFrequently: true });
+        const rayImgData = rayCtx.createImageData(RAY_RES, RAY_RES);
+
+        // Liaison des filtres de ligne
+        ['hand', 'basket', 'volley', 'minihand', 'minibasket'].forEach(sport => {
+            const el = document.getElementById(`chk${sport.charAt(0).toUpperCase() + sport.slice(1)}`);
+            if(el) {
+                el.addEventListener('change', (e) => {
+                    state.visibleSports[sport] = e.target.checked;
+                    requestRender();
+                });
+            }
+        });
+
+        // ==========================================
+        // 3. MOTEUR DE RENDU 
+        // ==========================================
+        let renderRequested = false;
+
+        function requestRender() {
+            if (!renderRequested) { 
+                renderRequested = true; 
+                requestAnimationFrame(renderAll); 
+            }
+        }
+
+        function renderAll() {
+            renderRequested = false;
+            updateTransforms();
+            
+            const ctx = ui.ctx;
+            const cvs = ui.mainCanvas;
+            
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+            
+            if (state.image) {
+                ctx.save();
+                ctx.translate(state.view.x, state.view.y);
+                ctx.scale(state.view.zoom, state.view.zoom);
+                ctx.drawImage(state.image, 0, 0);
+                ctx.restore();
+            }
+
+            const drawItem = (pt, isCalib) => {
+                if (state.mode === 'calib' && !isCalib) ctx.globalAlpha = 0.3;
+                else if (state.mode === 'player' && isCalib) ctx.globalAlpha = 0.3;
+                else ctx.globalAlpha = 1.0;
+
+                const scTarget = worldToScreen(pt.photoX, pt.photoY);
+                const scLabel = { x: scTarget.x + pt.offX, y: scTarget.y + pt.offY };
+                const color = isCalib ? '#f59e0b' : state.teams[pt.team].color;
+                const isHovered = state.dragPhoto && state.dragPhoto.obj === pt;
+
+                ctx.beginPath(); ctx.moveTo(scTarget.x, scTarget.y); ctx.lineTo(scLabel.x, scLabel.y);
+                ctx.strokeStyle = isHovered ? color : 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+
+                ctx.beginPath(); ctx.arc(scTarget.x, scTarget.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#0f172a'; ctx.stroke();
+                
+                if (isHovered && state.dragPhoto.type === 'target') {
+                    ctx.beginPath(); ctx.arc(scTarget.x, scTarget.y, 10, 0, Math.PI * 2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
+                }
+
+                ctx.font = 'bold 12px sans-serif';
+                let text = isCalib ? `Repère ${pt.label}` : `${pt.num} - ${pt.role}`;
+                const boxW = ctx.measureText(text).width + 16, boxH = 24;
+
+                ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 2;
+                ctx.fillStyle = isCalib ? '#1e293b' : color;
+                if (isHovered && state.dragPhoto.type === 'label') ctx.fillStyle = color;
+                
+                ctx.beginPath(); ctx.roundRect(scLabel.x - boxW/2, scLabel.y - boxH/2, boxW, boxH, 6); ctx.fill();
+                if (isCalib) { ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke(); }
+                ctx.shadowColor = 'transparent';
+
+                ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(text, scLabel.x, scLabel.y);
+                ctx.globalAlpha = 1.0;
+            };
+
+            state.calibPoints.forEach(p => drawItem(p, true));
+            state.playersOnPitch.forEach(p => drawItem(p, false));
+
+            renderMap();
+        }
+
+        function renderMap() {
+            const mCtx = ui.mapCtx;
+            const cw = ui.mapCanvas.width;
+            const ch = ui.mapCanvas.height;
+            const size = Math.min(cw, ch);
+            const scale = size / 20;
+            const cx = (cw - size) / 2;
+            const cy = (ch - size) / 2;
+
+            mCtx.clearRect(0, 0, cw, ch);
+            mCtx.fillStyle = '#e5a86d'; 
+            mCtx.fillRect(0, 0, cw, ch);
+
+            // CORRECTION: Génération d'un rendu toujours "à l'endroit" logiquement
+            if (state.showProjection && state.transforms.mapToPhotoMatrix && state.offscreenData) {
+                if (state.raytraceDirty) {
+                    const outD = rayImgData.data;
+                    const inD = state.offscreenData.data;
+                    const inW = state.offscreenData.width;
+                    const inH = state.offscreenData.height;
+                    const offS = state.offscreenScale;
+                    const h = state.transforms.mapToPhotoMatrix;
+                    const invScale = 20 / RAY_RES;
+
+                    for (let y = 0; y < RAY_RES; y++) {
+                        for (let x = 0; x < RAY_RES; x++) {
+                            let outIdx = (y * RAY_RES + x) << 2;
+                            outD[outIdx] = 229; outD[outIdx+1] = 168; outD[outIdx+2] = 109; outD[outIdx+3] = 255;
+                            
+                            // On ne fait plus d'inversion mathématique isMapFlipped ici !
+                            let lx = x * invScale, ly = y * invScale; 
+                            
+                            let denom = h[6] * lx + h[7] * ly + 1;
+                            if (denom <= 0.0001) continue; 
+                            
+                            let px = (h[0] * lx + h[1] * ly + h[2]) / denom;
+                            let py = (h[3] * lx + h[4] * ly + h[5]) / denom;
+                            
+                            let ox = (px * offS) | 0, oy = (py * offS) | 0;
+                            
+                            if (ox >= 0 && ox < inW && oy >= 0 && oy < inH) {
+                                let inIdx = (oy * inW + ox) << 2;
+                                outD[outIdx]   = (inD[inIdx] * 0.75 + 229 * 0.25) | 0;
+                                outD[outIdx+1] = (inD[inIdx+1] * 0.75 + 168 * 0.25) | 0;
+                                outD[outIdx+2] = (inD[inIdx+2] * 0.75 + 109 * 0.25) | 0;
+                            }
+                        }
+                    }
+                    rayCtx.putImageData(rayImgData, 0, 0);
+                    state.raytraceDirty = false;
+                }
+            }
+
+            mCtx.save();
+            // Appliquer Pan et Zoom interactif de la minimap
+            mCtx.translate(cx + state.mapView.x, cy + state.mapView.y);
+            mCtx.scale(state.mapView.zoom, state.mapView.zoom);
+
+            // CORRECTION : La rotation du Context pivote tout d'un coup (vecteurs ET raytracing)
+            if (state.isMapFlipped) { mCtx.translate(size/2, size/2); mCtx.rotate(Math.PI); mCtx.translate(-size/2, -size/2); }
+
+            // Dessin projection 3D depuis le buffer HR
+            if (state.showProjection && state.transforms.mapToPhotoMatrix && state.offscreenData) {
+                mCtx.drawImage(rayCanvas, 0, 0, RAY_RES, RAY_RES, 0, 0, size, size);
+            }
+
+            // --- 1. HANDBALL ---
+            if (state.visibleSports.hand) {
+                mCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; mCtx.lineWidth = 2;
+                mCtx.strokeRect(0, 0, size, size);
+                mCtx.fillStyle = 'rgba(255,255,255,0.4)'; mCtx.fillRect(8.5 * scale, 0, 3 * scale, 0.5 * scale); mCtx.strokeRect(8.5 * scale, 0, 3 * scale, 0.5 * scale); 
+                mCtx.beginPath(); mCtx.arc(8.5*scale, 0, 6*scale, Math.PI, Math.PI/2, true); mCtx.lineTo(11.5*scale, 6*scale); mCtx.arc(11.5*scale, 0, 6*scale, Math.PI/2, 0, true); mCtx.stroke(); 
+                mCtx.setLineDash([4, 4]); mCtx.beginPath(); mCtx.arc(8.5*scale, 0, 9*scale, Math.PI, Math.PI/2, true); mCtx.lineTo(11.5*scale, 9*scale); mCtx.arc(11.5*scale, 0, 9*scale, Math.PI/2, 0, true); mCtx.stroke(); 
+                mCtx.setLineDash([]); mCtx.beginPath(); mCtx.moveTo(9.5*scale, 7*scale); mCtx.lineTo(10.5*scale, 7*scale); mCtx.stroke(); 
+                mCtx.beginPath(); mCtx.moveTo(9.85*scale, 4*scale); mCtx.lineTo(10.15*scale, 4*scale); mCtx.stroke(); 
+            }
+
+            // --- 2. BASKETBALL ---
+            if (state.visibleSports.basket) {
+                mCtx.strokeStyle = 'rgba(220, 38, 38, 0.6)'; mCtx.lineWidth = 1.5;
+                const baseB = 6 * scale;
+                mCtx.strokeRect(2.5 * scale, baseB, 15 * scale, 14 * scale); 
+                mCtx.strokeRect((10 - 2.45) * scale, baseB, 4.9 * scale, 5.8 * scale); 
+                mCtx.beginPath(); mCtx.arc(10*scale, (6+5.8)*scale, 1.8*scale, 0, Math.PI, false); mCtx.stroke();
+                mCtx.setLineDash([3,3]); mCtx.beginPath(); mCtx.arc(10*scale, (6+5.8)*scale, 1.8*scale, 0, Math.PI, true); mCtx.stroke(); mCtx.setLineDash([]);
+                const hoopY = (6 + 1.575) * scale;
+                mCtx.beginPath(); mCtx.moveTo(3.4*scale, baseB); mCtx.lineTo(3.4*scale, (6+2.99)*scale); 
+                mCtx.arc(10*scale, hoopY, 6.75*scale, 0.2113, Math.PI-0.2113, false); 
+                mCtx.lineTo(16.6*scale, baseB); mCtx.stroke(); 
+            }
+
+            // --- 3. VOLLEYBALL ---
+            if (state.visibleSports.volley) {
+                mCtx.strokeStyle = 'rgba(37, 99, 235, 0.6)'; mCtx.lineWidth = 1.5;
+                mCtx.strokeRect(5.5*scale, 11*scale, 9*scale, 9*scale); 
+                mCtx.beginPath(); mCtx.moveTo(5.5*scale, 17*scale); mCtx.lineTo(14.5*scale, 17*scale); mCtx.stroke(); 
+            }
+
+            // --- 4. MINI-HANDBALL ---
+            if (state.visibleSports.minihand) {
+                mCtx.strokeStyle = 'rgba(234, 179, 8, 0.7)'; mCtx.lineWidth = 1.5; mCtx.setLineDash([4, 4]); 
+                mCtx.beginPath(); mCtx.moveTo(10*scale, 0); mCtx.lineTo(10*scale, 20*scale); mCtx.stroke();
+                mCtx.beginPath(); mCtx.arc(0, 8.5*scale, 5*scale, -Math.PI/2, 0, false); mCtx.lineTo(5*scale, 11.5*scale); mCtx.arc(0, 11.5*scale, 5*scale, 0, Math.PI/2, false); mCtx.stroke();
+                mCtx.beginPath(); mCtx.arc(20*scale, 8.5*scale, 5*scale, -Math.PI/2, Math.PI, true); mCtx.lineTo(15*scale, 11.5*scale); mCtx.arc(20*scale, 11.5*scale, 5*scale, Math.PI, Math.PI/2, true); mCtx.stroke();
+                mCtx.setLineDash([]);
+            }
+
+            // --- 5. MINI-BASKET ---
+            if (state.visibleSports.minibasket) {
+                mCtx.strokeStyle = 'rgba(168, 85, 247, 0.7)'; mCtx.lineWidth = 1.5;
+                mCtx.beginPath(); mCtx.moveTo(0, 2.5*scale); mCtx.lineTo(20*scale, 2.5*scale); mCtx.stroke();
+                mCtx.beginPath(); mCtx.moveTo(0, 17.5*scale); mCtx.lineTo(20*scale, 17.5*scale); mCtx.stroke();
+                mCtx.beginPath(); mCtx.arc(10*scale, 10*scale, 1.8*scale, 0, Math.PI*2); mCtx.stroke();
+                mCtx.strokeRect(0, (10-2.45)*scale, 4*scale, 4.9*scale); mCtx.beginPath(); mCtx.arc(4*scale, 10*scale, 1.8*scale, -Math.PI/2, Math.PI/2); mCtx.stroke();
+                mCtx.strokeRect((20-4)*scale, (10-2.45)*scale, 4*scale, 4.9*scale); mCtx.beginPath(); mCtx.arc((20-4)*scale, 10*scale, 1.8*scale, Math.PI/2, -Math.PI/2); mCtx.stroke();
+            }
+
+            mCtx.restore(); 
+
+            const transform = state.transforms.photoToMap;
+            const getMapScreen = (logicX, logicY) => {
+                let mx = logicX * scale, my = logicY * scale;
+                if (state.isMapFlipped) { mx = size - mx; my = size - my; }
+                return { x: cx + state.mapView.x + mx * state.mapView.zoom, y: cy + state.mapView.y + my * state.mapView.zoom };
+            };
+
+            // Points de calibrage
+            state.calibPoints.forEach((p, i) => {
+                const sc = getMapScreen(p.mapX, p.mapY);
+                mCtx.fillStyle = '#f59e0b'; mCtx.beginPath(); mCtx.arc(sc.x, sc.y, 7, 0, Math.PI * 2); mCtx.fill();
+                mCtx.strokeStyle = 'white'; mCtx.lineWidth = 1.5; mCtx.stroke();
+                mCtx.fillStyle = 'white'; mCtx.font = 'bold 10px sans-serif'; mCtx.textAlign = 'center'; mCtx.textBaseline = 'middle';
+                mCtx.fillText(p.label, sc.x, sc.y);
+            });
+
+            if (!transform) {
+                mCtx.fillStyle = 'rgba(0,0,0,0.6)'; mCtx.fillRect(0,0,cw,ch);
+                mCtx.fillStyle = '#ef4444'; mCtx.font = 'bold 12px sans-serif'; mCtx.textAlign='center'; mCtx.fillText("Géométrie Invalide", cw/2, ch/2);
+                return;
+            }
+
+            // Joueurs sur Minimap
+            state.playersOnPitch.forEach(p => {
+                let mPos = transform(p.photoX, p.photoY);
+                if (!mPos) return;
+                const sc = getMapScreen(mPos.x, mPos.y);
+                
+                mCtx.fillStyle = state.teams[p.team].color; mCtx.beginPath(); mCtx.arc(sc.x, sc.y, 6, 0, Math.PI*2); mCtx.fill();
+                mCtx.strokeStyle = 'white'; mCtx.lineWidth = 1; mCtx.stroke();
+                mCtx.fillStyle = 'white'; mCtx.font = 'bold 8px sans-serif'; mCtx.textAlign = 'center'; mCtx.textBaseline='middle';
+                mCtx.fillText(p.num, sc.x, sc.y);
+            });
+        }
+
+        // ==========================================
+        // 4. UI & LOGIQUE DE REDIMENSIONNEMENT
+        // ==========================================
+        function resize() {
+            ui.mainCanvas.width = ui.mainCanvas.parentElement.clientWidth;
+            ui.mainCanvas.height = ui.mainCanvas.parentElement.clientHeight;
+            
+            ui.mapCanvas.width = ui.mapCanvas.parentElement.clientWidth;
+            ui.mapCanvas.height = ui.mapCanvas.parentElement.clientHeight;
+            requestRender();
+        }
+
+        const resizeObserver = new ResizeObserver(() => { resize(); });
+        resizeObserver.observe(ui.mainCanvas.parentElement);
+        resizeObserver.observe(ui.mapCanvas.parentElement);
+
+        ui.expandMapBtn.addEventListener('click', () => {
+            state.isMapExpanded = !state.isMapExpanded;
+            if (state.isMapExpanded) {
+                ui.liveMapPanel.classList.remove('top-4', 'right-4', 'z-40');
+                ui.liveMapPanel.classList.add('inset-2', 'md:inset-10', 'z-50');
+                ui.mapContainerWrapper.classList.remove('w-[220px]', 'h-[220px]');
+                ui.mapContainerWrapper.classList.add('flex-1', 'w-full', 'h-full');
+                ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 14h4v4m0-4l-5 5m11-11h-4V4m0 4l5-5M4 10h4V6m0 4l-5-5m11 11h-4v4m0-4l5 5"></path></svg>';
+                
+                // Afficher le panneau de filtres
+                ui.mapControls.classList.remove('hidden');
+                ui.mapControls.classList.add('flex');
+            } else {
+                ui.liveMapPanel.classList.add('top-4', 'right-4', 'z-40');
+                ui.liveMapPanel.classList.remove('inset-2', 'md:inset-10', 'z-50');
+                ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
+                ui.mapContainerWrapper.classList.remove('flex-1', 'w-full', 'h-full');
+                ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>';
+                
+                // Cacher le panneau de filtres
+                ui.mapControls.classList.add('hidden');
+                ui.mapControls.classList.remove('flex');
+            }
+            state.mapView = { x: 0, y: 0, zoom: 1 };
+            resize(); 
+        });
+
+        const toggleSidebar = () => ui.sidebar.classList.toggle('-translate-x-full');
+        ui.teamsBtn.addEventListener('click', toggleSidebar);
+        ui.mobileSidebarBtn.addEventListener('click', toggleSidebar);
+        ui.closeSidebarBtn.addEventListener('click', () => ui.sidebar.classList.add('-translate-x-full'));
+
+        function setMode(mode) {
+            state.mode = mode;
+            [ui.modePan, ui.modeCalib, ui.modePlayer].forEach(b => b.className = "px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800");
+            const active = mode === 'pan' ? ui.modePan : (mode === 'calib' ? ui.modeCalib : ui.modePlayer);
+            active.className = "px-4 py-2 text-xs rounded-lg font-bold shadow text-white";
+            active.classList.add(mode === 'pan' ? 'bg-slate-600' : (mode === 'calib' ? 'bg-indigo-600' : 'bg-emerald-600'));
+            requestRender();
+        }
+        ui.modePan.addEventListener('click', () => setMode('pan'));
+        ui.modeCalib.addEventListener('click', () => setMode('calib'));
+        ui.modePlayer.addEventListener('click', () => setMode('player'));
+
+        ui.flipMapBtn.addEventListener('click', () => { 
+            state.isMapFlipped = !state.isMapFlipped; 
+            // Plus besoin de raytraceDirty=true, la rotation Canvas gère tout !
+            requestRender(); 
+        });
+        ui.toggleProjBtn.addEventListener('click', () => { 
+            state.showProjection = !state.showProjection; 
+            ui.toggleProjBtn.classList.toggle('text-indigo-400', state.showProjection);
+            ui.toggleProjBtn.classList.toggle('text-slate-400', !state.showProjection);
+            state.raytraceDirty = true;
+            requestRender(); 
+        });
+
+        ['A', 'B'].forEach(t => {
+            document.getElementById(`colorTeam${t}`).addEventListener('input', e => { state.teams[t].color = e.target.value; requestRender(); });
+            document.getElementById(`nameTeam${t}`).addEventListener('input', e => { state.teams[t].name = e.target.value; requestRender(); });
+        });
+
+        function buildRoster(teamId, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            ROSTER_TEMPLATE.forEach(p => {
+                const btn = document.createElement('button');
+                btn.className = "bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs text-left p-2 rounded text-slate-300 flex justify-between items-center";
+                btn.innerHTML = `<span class="font-bold w-4">${p.num}</span> <span class="truncate">${p.role}</span>`;
+                btn.onclick = () => addPlayerToPitch(teamId, p.num, p.role);
+                container.appendChild(btn);
+            });
+        }
+        buildRoster('A', 'rosterA'); buildRoster('B', 'rosterB');
+
+        function addPlayerToPitch(teamId, num, role) {
+            if(!state.image) return alert("Chargez une photo d'abord !");
+            const centerWorld = screenToWorld(ui.mainCanvas.width / 2, ui.mainCanvas.height / 2);
+            state.playersOnPitch.push({ id: 'p' + Date.now(), team: teamId, num: num, role: role, photoX: centerWorld.x, photoY: centerWorld.y, offX: 0, offY: -50 });
+            setMode('player');
+            if(window.innerWidth < 768) ui.sidebar.classList.add('-translate-x-full');
+            requestRender();
+        }
+
+        document.getElementById('imageUpload').addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = event => {
+                const img = new Image();
+                img.onload = () => {
+                    state.image = img;
+                    state.playersOnPitch = [];
+                    
+                    const offCanvas = document.createElement('canvas');
+                    const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+                    const maxDim = 800; 
+                    const offScale = Math.min(maxDim / img.naturalWidth, maxDim / img.naturalHeight, 1);
+                    offCanvas.width = img.naturalWidth * offScale;
+                    offCanvas.height = img.naturalHeight * offScale;
+                    offCtx.drawImage(img, 0, 0, offCanvas.width, offCanvas.height);
+                    state.offscreenData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+                    state.offscreenScale = offScale;
+
+                    const padding = 40;
+                    const scale = Math.min((ui.mainCanvas.width - padding) / img.naturalWidth, (ui.mainCanvas.height - padding) / img.naturalHeight);
+                    state.view.zoom = scale;
+                    state.view.x = (ui.mainCanvas.width - img.naturalWidth * scale) / 2;
+                    state.view.y = (ui.mainCanvas.height - img.naturalHeight * scale) / 2;
+                    
+                    const cx = img.naturalWidth / 2, cy = img.naturalHeight / 2, s = Math.min(img.naturalWidth, img.naturalHeight) * 0.2;
+                    state.calibPoints[0].photoX = cx - s; state.calibPoints[0].photoY = cy - s;
+                    state.calibPoints[1].photoX = cx + s; state.calibPoints[1].photoY = cy - s;
+                    state.calibPoints[2].photoX = cx + s; state.calibPoints[2].photoY = cy + s;
+                    state.calibPoints[3].photoX = cx - s; state.calibPoints[3].photoY = cy + s;
+                    
+                    state.raytraceDirty = true;
+                    setMode('calib');
+                    resize();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // ==========================================
+        // 5. MATHS & TRANSFORMATIONS
+        // ==========================================
+        function worldToScreen(wx, wy) { return { x: wx * state.view.zoom + state.view.x, y: wy * state.view.zoom + state.view.y }; }
+        function screenToWorld(sx, sy) { return { x: (sx - state.view.x) / state.view.zoom, y: (sy - state.view.y) / state.view.zoom }; }
+
+        function getHomographyMatrix(src, dst) {
+            let A = [], B = [];
+            for (let i = 0; i < 4; i++) {
+                A.push([src[i].x, src[i].y, 1, 0, 0, 0, -src[i].x * dst[i].x, -src[i].y * dst[i].x]); B.push(dst[i].x);
+                A.push([0, 0, 0, src[i].x, src[i].y, 1, -src[i].x * dst[i].y, -src[i].y * dst[i].y]); B.push(dst[i].y);
+            }
+            let n = 8;
+            for (let i = 0; i < n; i++) {
+                let maxEl = Math.abs(A[i][i]), maxRow = i;
+                for (let k = i+1; k < n; k++) if (Math.abs(A[k][i]) > maxEl) { maxEl = Math.abs(A[k][i]); maxRow = k; }
+                if (maxEl === 0) return null;
+                let tmp = A[maxRow]; A[maxRow] = A[i]; A[i] = tmp;
+                let tmp2 = B[maxRow]; B[maxRow] = B[i]; B[i] = tmp2;
+                for (let k = i+1; k < n; k++) {
+                    let c = -A[k][i] / A[i][i];
+                    for (let j = i; j < n; j++) { if (i === j) A[k][j] = 0; else A[k][j] += c * A[i][j]; }
+                    B[k] += c * B[i];
+                }
+            }
+            let x = new Array(n).fill(0);
+            for (let i = n-1; i >= 0; i--) {
+                x[i] = B[i] / A[i][i];
+                for (let k = i-1; k >= 0; k--) B[k] -= A[k][i] * x[i];
+            }
+            return x;
+        }
+
+        function buildTransformFunc(matrix) {
+            if (!matrix) return null;
+            return function(x, y) {
+                let denom = matrix[6] * x + matrix[7] * y + 1;
+                return { x: (matrix[0] * x + matrix[1] * y + matrix[2]) / denom, y: (matrix[3] * x + matrix[4] * y + matrix[5]) / denom };
+            };
+        }
+
+        function updateTransforms() {
+            const srcPhoto = state.calibPoints.map(p => ({ x: p.photoX, y: p.photoY }));
+            const dstMapLogic = state.calibPoints.map(p => ({ x: p.mapX, y: p.mapY }));
+            
+            state.transforms.mapToPhotoMatrix = getHomographyMatrix(dstMapLogic, srcPhoto);
+            state.transforms.photoToMap = buildTransformFunc(getHomographyMatrix(srcPhoto, dstMapLogic));
+            state.transforms.mapToPhoto = buildTransformFunc(state.transforms.mapToPhotoMatrix);
+        }
+
+        // ==========================================
+        // 6. INTERACTIONS SOURIS/TACTILE
+        // ==========================================
+        function getPos(e, cvs) { const r = cvs.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
+        // --- Photo Interactions ---
+        function hitTestPhoto(x, y) {
+            if (state.mode === 'pan') return null;
+            let pts = state.mode === 'calib' ? state.calibPoints : state.playersOnPitch;
+            for (let i = pts.length - 1; i >= 0; i--) {
+                const pt = pts[i];
+                const scT = worldToScreen(pt.photoX, pt.photoY);
+                const scL = { x: scT.x + pt.offX, y: scT.y + pt.offY };
+                if (Math.abs(x - scL.x) < 40 && Math.abs(y - scL.y) < 15) return { obj: pt, type: 'label', canvas: 'photo' };
+                if (Math.hypot(x - scT.x, y - scT.y) < 20) return { obj: pt, type: 'target', canvas: 'photo' };
+            }
+            return null;
+        }
+
+        function applyZoom(factor, centerX, centerY) {
+            const wX = (centerX - state.view.x) / state.view.zoom;
+            const wY = (centerY - state.view.y) / state.view.zoom;
+            state.view.zoom = Math.min(Math.max(state.view.zoom * factor, 0.1), 10);
+            state.view.x = centerX - wX * state.view.zoom;
+            state.view.y = centerY - wY * state.view.zoom;
+            requestRender();
+        }
+
+        ui.mainCanvas.addEventListener('pointerdown', e => {
+            state.pointersPhoto.set(e.pointerId, e);
+            if (state.pointersPhoto.size === 1) {
+                const pos = getPos(e, ui.mainCanvas);
+                const hit = hitTestPhoto(pos.x, pos.y);
+                if (hit) {
+                    ui.mainCanvas.setPointerCapture(e.pointerId);
+                    state.dragPhoto = { ...hit, sX: pos.x, sY: pos.y, sWX: hit.obj.photoX, sWY: hit.obj.photoY, sOX: hit.obj.offX, sOY: hit.obj.offY };
+                    requestRender();
+                }
+            }
+        });
+
+        ui.mainCanvas.addEventListener('pointermove', e => {
+            if (!state.pointersPhoto.has(e.pointerId)) return;
+            const prev = state.pointersPhoto.get(e.pointerId);
+            state.pointersPhoto.set(e.pointerId, e);
+            const pos = getPos(e, ui.mainCanvas);
+
+            if (state.dragPhoto && state.pointersPhoto.size === 1) {
+                const dx = pos.x - state.dragPhoto.sX, dy = pos.y - state.dragPhoto.sY;
+                if (state.dragPhoto.type === 'target') {
+                    state.dragPhoto.obj.photoX = state.dragPhoto.sWX + dx / state.view.zoom;
+                    state.dragPhoto.obj.photoY = state.dragPhoto.sWY + dy / state.view.zoom;
+                    state.raytraceDirty = true; 
+                } else {
+                    state.dragPhoto.obj.offX = state.dragPhoto.sOX + dx; state.dragPhoto.obj.offY = state.dragPhoto.sOY + dy;
+                }
+                requestRender();
+            } else if (!state.dragPhoto && state.pointersPhoto.size === 1) {
+                state.view.x += e.clientX - prev.clientX; state.view.y += e.clientY - prev.clientY; requestRender();
+            } else if (state.pointersPhoto.size === 2) {
+                const pts = Array.from(state.pointersPhoto.values());
+                const p1 = pts[0], p2 = pts[1];
+                const prevP1 = p1.pointerId === e.pointerId ? prev : p1;
+                const prevP2 = p2.pointerId === e.pointerId ? prev : p2;
+
+                const prevDist = Math.hypot(prevP1.clientX - prevP2.clientX, prevP1.clientY - prevP2.clientY);
+                const curDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+
+                if (prevDist > 0) {
+                    const rect = ui.mainCanvas.getBoundingClientRect();
+                    applyZoom(curDist / prevDist, (p1.clientX + p2.clientX) / 2 - rect.left, (p1.clientY + p2.clientY) / 2 - rect.top);
+                }
+
+                state.view.x += (p1.clientX + p2.clientX) / 2 - (prevP1.clientX + prevP2.clientX) / 2;
+                state.view.y += (p1.clientY + p2.clientY) / 2 - (prevP1.clientY + prevP2.clientY) / 2;
+                requestRender();
+            }
+        });
+
+        const endPhoto = e => { state.pointersPhoto.delete(e.pointerId); if(state.pointersPhoto.size===0) state.dragPhoto = null; requestRender(); };
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => ui.mainCanvas.addEventListener(evt, endPhoto));
+        ui.mainCanvas.addEventListener('wheel', e => { e.preventDefault(); applyZoom(e.deltaY > 0 ? 0.9 : 1.1, getPos(e, ui.mainCanvas).x, getPos(e, ui.mainCanvas).y); }, { passive: false });
+
+        // --- Map Interactions ---
+        function hitTestMap(x, y) {
+            if (state.mode === 'pan') return null;
+            const cw = ui.mapCanvas.width, ch = ui.mapCanvas.height;
+            const size = Math.min(cw, ch), scale = size / 20;
+            const cx = (cw - size) / 2, cy = (ch - size) / 2;
+
+            let logicX = (x - cx - state.mapView.x) / (state.mapView.zoom * scale);
+            let logicY = (y - cy - state.mapView.y) / (state.mapView.zoom * scale);
+            if (state.isMapFlipped) { logicX = 20 - logicX; logicY = 20 - logicY; }
+            
+            const tol = 15 / (state.mapView.zoom * scale); 
+
+            if (state.mode === 'calib') {
+                for (let p of state.calibPoints) { if (Math.hypot(p.mapX - logicX, p.mapY - logicY) < tol) return { obj: p, type: 'calibMap' }; }
+            } else if (state.mode === 'player') {
+                for (let p of state.playersOnPitch) {
+                    if(!state.transforms.photoToMap) continue;
+                    let mPos = state.transforms.photoToMap(p.photoX, p.photoY);
+                    if(mPos && Math.hypot(mPos.x - logicX, mPos.y - logicY) < tol) return { obj: p, type: 'playerMap' };
+                }
+            }
+            return null;
+        }
+
+        function applyMapZoom(factor, centerX, centerY) {
+            const wX = (centerX - state.mapView.x) / state.mapView.zoom;
+            const wY = (centerY - state.mapView.y) / state.mapView.zoom;
+            state.mapView.zoom = Math.min(Math.max(state.mapView.zoom * factor, 0.5), 10);
+            state.mapView.x = centerX - wX * state.mapView.zoom;
+            state.mapView.y = centerY - wY * state.mapView.zoom;
+            requestRender();
+        }
+
+        ui.mapCanvas.addEventListener('pointerdown', e => {
+            state.pointersMap.set(e.pointerId, e);
+            if (state.pointersMap.size === 1) {
+                const pos = getPos(e, ui.mapCanvas);
+                const hit = hitTestMap(pos.x, pos.y);
+                if (hit) { ui.mapCanvas.setPointerCapture(e.pointerId); state.dragMap = hit; requestRender(); }
+            }
+        });
+
+        ui.mapCanvas.addEventListener('pointermove', e => {
+            if (!state.pointersMap.has(e.pointerId)) return;
+            const prev = state.pointersMap.get(e.pointerId);
+            state.pointersMap.set(e.pointerId, e);
+            const pos = getPos(e, ui.mapCanvas);
+
+            if (state.dragMap && state.pointersMap.size === 1) {
+                const cw = ui.mapCanvas.width, ch = ui.mapCanvas.height, size = Math.min(cw, ch), scale = size / 20;
+                const cx = (cw - size) / 2, cy = (ch - size) / 2;
+                let logicX = (pos.x - cx - state.mapView.x) / (state.mapView.zoom * scale);
+                let logicY = (pos.y - cy - state.mapView.y) / (state.mapView.zoom * scale);
+                if (state.isMapFlipped) { logicX = 20 - logicX; logicY = 20 - logicY; }
+
+                if (state.dragMap.type === 'calibMap') {
+                    state.dragMap.obj.mapX = logicX; state.dragMap.obj.mapY = logicY;
+                    state.raytraceDirty = true; 
+                } else if (state.dragMap.type === 'playerMap' && state.transforms.mapToPhoto) {
+                    let photoPos = state.transforms.mapToPhoto(logicX, logicY);
+                    if (photoPos) { state.dragMap.obj.photoX = photoPos.x; state.dragMap.obj.photoY = photoPos.y; }
+                }
+                requestRender();
+            } else if (!state.dragMap && state.pointersMap.size === 1) {
+                state.mapView.x += e.clientX - prev.clientX; state.mapView.y += e.clientY - prev.clientY; requestRender();
+            } else if (state.pointersMap.size === 2) {
+                const pts = Array.from(state.pointersMap.values());
+                const p1 = pts[0], p2 = pts[1];
+                const prevP1 = p1.pointerId === e.pointerId ? prev : p1;
+                const prevP2 = p2.pointerId === e.pointerId ? prev : p2;
+
+                const prevDist = Math.hypot(prevP1.clientX - prevP2.clientX, prevP1.clientY - prevP2.clientY);
+                const curDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+
+                if (prevDist > 0) {
+                    const rect = ui.mapCanvas.getBoundingClientRect();
+                    applyMapZoom(curDist / prevDist, (p1.clientX + p2.clientX) / 2 - rect.left, (p1.clientY + p2.clientY) / 2 - rect.top);
+                }
+
+                state.mapView.x += (p1.clientX + p2.clientX) / 2 - (prevP1.clientX + prevP2.clientX) / 2;
+                state.mapView.y += (p1.clientY + p2.clientY) / 2 - (prevP1.clientY + prevP2.clientY) / 2;
+                requestRender();
+            }
+        });
+
+        const endMap = e => { state.pointersMap.delete(e.pointerId); if(state.pointersMap.size===0) state.dragMap = null; requestRender(); };
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => ui.mapCanvas.addEventListener(evt, endMap));
+        ui.mapCanvas.addEventListener('wheel', e => { e.preventDefault(); const pos = getPos(e, ui.mapCanvas); applyMapZoom(e.deltaY > 0 ? 0.9 : 1.1, pos.x, pos.y); }, { passive: false });
+    </script>
+</body>
+</html>
+
+
