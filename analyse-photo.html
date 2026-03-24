@@ -3,24 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Handball Tactique Expert V8.2</title>
+    <title>Handball Tactique Expert V11.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #0f172a; touch-action: none; font-family: 'Segoe UI', system-ui, sans-serif; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        #contextModal {
+            position: absolute;
+            background: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            padding: 12px;
+            z-index: 1000;
+            display: none;
+            width: 220px;
+        }
+        .modal-btn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 4px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .modal-input {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            width: 100%;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
 </head>
 <body class="text-slate-200 select-none flex flex-col h-screen">
 
+    <div id="contextModal">
+        <div id="modalTitle" class="text-[10px] uppercase tracking-widest text-slate-400 mb-2 px-1">Édition</div>
+        <div id="playerInputs" class="hidden">
+            <input type="text" id="editNum" class="modal-input" placeholder="Numéro">
+            <input type="text" id="editRole" class="modal-input" placeholder="Nom / Poste">
+        </div>
+        <div id="calibInputs" class="hidden">
+            <input type="text" id="editLabel" class="modal-input" placeholder="Nom du repère">
+        </div>
+        
+        <div id="modalActions">
+            </div>
+    </div>
+
     <!-- HEADER -->
-    <header class="bg-slate-900 border-b border-slate-700 p-3 shadow-lg flex justify-between items-center shrink-0 z-20">
+    <header class="bg-slate-900 border-b border-slate-700 p-3 shadow-lg flex justify-between items-center shrink-0 z-20 flex-wrap gap-2">
         <div>
-            <h1 class="text-xl font-black tracking-wide text-indigo-400">TACTIQUE <span class="text-white">V8.2</span></h1>
+            <h1 class="text-xl font-black tracking-wide text-indigo-400">TACTIQUE <span class="text-white">V11.0</span></h1>
             <p class="text-[10px] text-slate-400 uppercase tracking-widest">Filtres Multi-Sports</p>
         </div>
-        <div class="flex gap-3">
+        <div class="flex flex-wrap gap-2">
+            <button id="saveProjectBtn" class="bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-bold shadow hover:bg-emerald-700 transition-colors flex items-center gap-2" title="Sauvegarder et partager le projet">
+                💾 Sauver
+            </button>
+            <label for="loadProjectInput" class="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-bold shadow cursor-pointer hover:bg-blue-700 transition-colors flex items-center gap-2" title="Charger un projet">
+                📂 Charger
+            </label>
+            <input type="file" id="loadProjectInput" accept=".json" class="hidden">
+            
+            <button id="exportPdfBtn" class="bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-bold shadow hover:bg-red-700 transition-colors flex items-center gap-2" title="Exporter en PDF A4">
+                📄 PDF
+            </button>
+            
+            <div class="w-px h-8 bg-slate-700 mx-1 hidden sm:block"></div>
+
             <button id="teamsBtn" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow border border-slate-600 active:bg-slate-700 transition-colors flex items-center gap-2">
                 👥 Équipes
             </button>
@@ -28,6 +101,9 @@
                 📷 Photo
             </label>
             <input type="file" id="imageUpload" accept="image/*" class="hidden">
+            
+            <button id="toggleDebugBtn" class="px-3 py-2 text-[10px] rounded-lg bg-slate-800 text-slate-400 border border-slate-700 hover:text-white transition-colors">🐞 Debug IA</button>
+
         </div>
     </header>
 
@@ -38,7 +114,7 @@
         <aside id="sidebar" class="w-64 bg-slate-900 border-r border-slate-700 flex flex-col z-[60] transition-transform duration-300 transform -translate-x-full absolute h-full md:relative md:translate-x-0 shadow-2xl">
             <div class="p-3 border-b border-slate-700 flex justify-between items-center bg-slate-800">
                 <span class="font-bold text-sm uppercase tracking-wider text-slate-300">Banc de touche</span>
-                <button id="closeSidebarBtn" class="md:hidden text-slate-400 hover:text-white p-2">✕</button>
+                <button id="closeSidebarBtn" class=" md:relative text-slate-400 hover:text-white p-2">✕</button>
             </div>
             
             <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
@@ -64,60 +140,70 @@
         <div id="workspace" class="flex-1 relative bg-slate-950">
             
             <canvas id="mainCanvas" class="absolute inset-0 w-full h-full touch-none"></canvas>
-
-            <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-xl shadow-2xl flex gap-1 z-20 whitespace-nowrap">
+            <div class="absolute bottom-2 md:bottom-4 left-1/2 transform -translate-x-1/2 w-[95%] max-w-3xl bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-xl shadow-2xl flex flex-wrap justify-center gap-1.5 z-20">
+            <!-- <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-xl shadow-2xl flex gap-1 z-20 whitespace-nowrap"> -->
                 <button id="modePanBtn" class="px-4 py-2 text-xs rounded-lg font-bold shadow text-white bg-slate-600 transition-colors">✋ Vue</button>
                 <button id="modeCalibBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">📍 Repères</button>
                 <button id="modePlayerBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">🏃 Joueurs</button>
+                <button id="modeBallBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">🏀 Ballon</button>
                 <button id="mobileSidebarBtn" class="md:hidden px-4 py-2 text-xs rounded-lg bg-indigo-600 text-white font-bold ml-2">👥 Joueurs</button>
+                <button id="modeLinesBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800" title="Afficher les lignes sur la photo">🗺️ Lignes 3D</button>
+                <button id="modeDrawRunBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">🏃 Course</button>
+                <button id="modeDrawPassBtn" class="px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800">🏀 Passe</button>
+                <button id="modeAutoBtn" class="px-4 py-2 text-xs rounded-lg transition-colors font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 shadow hover:from-purple-500 hover:to-indigo-500 border border-purple-400">🪄 Auto IA</button>
+
             </div>
 
-            <!-- CARTE EN DIRECT -->
-            <div id="liveMapPanel" class="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-2xl shadow-2xl z-40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-                <div class="flex justify-between items-center mb-2 px-1">
-                    <span class="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Carte Active
-                    </span>
-                    <div class="flex gap-2 items-center">
-                        <button id="toggleProjBtn" class="text-indigo-400 hover:text-indigo-300" title="Activer Projection">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                        </button>
-                        <button id="flipMapBtn" class="text-slate-400 hover:text-white" title="Pivoter"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></button>
-                        <button id="expandMapBtn" class="text-slate-400 hover:text-white" title="Plein écran">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Panneau de Filtres (visible uniquement quand Modal Plein Écran) -->
-                <div id="mapControls" class="hidden flex-wrap gap-2 mb-2 p-2 border-b border-slate-700 bg-slate-800/80 justify-center rounded-lg">
-                    <label class="cursor-pointer select-none">
-                        <input type="checkbox" id="chkHand" checked class="peer sr-only">
-                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-slate-200 peer-checked:text-slate-900 peer-checked:border-slate-200 font-bold transition-colors">Handball</span>
-                    </label>
-                    <label class="cursor-pointer select-none">
-                        <input type="checkbox" id="chkBasket" class="peer sr-only">
-                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600 font-bold transition-colors">Basket</span>
-                    </label>
-                    <label class="cursor-pointer select-none">
-                        <input type="checkbox" id="chkVolley" class="peer sr-only">
-                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 font-bold transition-colors">Volley</span>
-                    </label>
-                    <label class="cursor-pointer select-none">
-                        <input type="checkbox" id="chkMinihand" class="peer sr-only">
-                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-yellow-500 peer-checked:text-white peer-checked:border-yellow-500 font-bold transition-colors">Mini-Hand</span>
-                    </label>
-                    <label class="cursor-pointer select-none">
-                        <input type="checkbox" id="chkMinibasket" class="peer sr-only">
-                        <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-purple-500 peer-checked:text-white peer-checked:border-purple-500 font-bold transition-colors">Mini-Basket</span>
-                    </label>
-                </div>
+            
 
-                <div id="mapContainerWrapper" class="relative w-[220px] h-[220px] rounded-xl overflow-hidden border border-slate-600 shadow-inner bg-[#e5a86d]">
-                    <canvas id="liveMapCanvas" class="absolute top-0 left-0 w-full h-full touch-none cursor-crosshair"></canvas>
+        </div>
+        <!-- CARTE EN DIRECT -->
+        <div id="liveMapPanel" class="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 p-2 rounded-2xl shadow-2xl z-40 flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+            <div class="flex justify-between items-center mb-2 px-1">
+                <span class="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Carte Active
+                </span>
+                <div class="flex gap-2 items-center">
+                    <button id="toggleProjBtn" class="text-indigo-400 hover:text-indigo-300" title="Activer Projection">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button id="flipMapBtn" class="text-slate-400 hover:text-white" title="Pivoter"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></button>
+                    <button id="expandMapBtn" class="text-slate-400 hover:text-white" title="Plein écran">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    </button>
+                    <button id="dockMapBtn" class="text-slate-400 hover:text-white" title="Ancrer à droite">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                    </button>
                 </div>
             </div>
+            
+            <!-- Panneau de Filtres (visible uniquement quand Modal Plein Écran) -->
+            <div id="mapControls" class="hidden flex-wrap gap-2 mb-2 p-2 border-b border-slate-700 bg-slate-800/80 justify-center rounded-lg">
+                <label class="cursor-pointer select-none">
+                    <input type="checkbox" id="chkHand" checked class="peer sr-only">
+                    <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-slate-200 peer-checked:text-slate-900 peer-checked:border-slate-200 font-bold transition-colors">Handball</span>
+                </label>
+                <label class="cursor-pointer select-none">
+                    <input type="checkbox" id="chkBasket" class="peer sr-only">
+                    <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-red-600 peer-checked:text-white peer-checked:border-red-600 font-bold transition-colors">Basket</span>
+                </label>
+                <label class="cursor-pointer select-none">
+                    <input type="checkbox" id="chkVolley" class="peer sr-only">
+                    <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 font-bold transition-colors">Volley</span>
+                </label>
+                <label class="cursor-pointer select-none">
+                    <input type="checkbox" id="chkMinihand" class="peer sr-only">
+                    <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-yellow-500 peer-checked:text-white peer-checked:border-yellow-500 font-bold transition-colors">Mini-Hand</span>
+                </label>
+                <label class="cursor-pointer select-none">
+                    <input type="checkbox" id="chkMinibasket" class="peer sr-only">
+                    <span class="px-3 py-1 text-xs rounded-full border border-slate-600 text-slate-400 peer-checked:bg-purple-500 peer-checked:text-white peer-checked:border-purple-500 font-bold transition-colors">Mini-Basket</span>
+                </label>
+            </div>
 
+            <div id="mapContainerWrapper" class="relative w-[220px] h-[220px] rounded-xl overflow-hidden border border-slate-600 shadow-inner bg-[#e5a86d]">
+                <canvas id="liveMapCanvas" class="absolute top-0 left-0 w-full h-full touch-none cursor-crosshair"></canvas>
+            </div>
         </div>
     </main>
 
@@ -125,6 +211,12 @@
         // ==========================================
         // 1. DONNÉES MÉTIER & ÉTAT
         // ==========================================
+
+        const defaultRoster = [
+            { num: '1', role: 'Gardien' }, { num: '2', role: 'Ailier G' }, { num: '3', role: 'Arrière G' },
+            { num: '4', role: 'Demi-Centre' }, { num: '5', role: 'Pivot' }, { num: '6', role: 'Arrière D' }, { num: '7', role: 'Ailier D' }
+        ];
+
         const ROSTER_TEMPLATE = [
             { num: '1', role: 'Gardien' }, { num: '2', role: 'Ailier G' }, { num: '3', role: 'Arrière G' },
             { num: '4', role: 'Demi-Centre' }, { num: '5', role: 'Pivot' }, { num: '6', role: 'Arrière D' }, { num: '7', role: 'Ailier D' }
@@ -141,16 +233,29 @@
             isMapExpanded: false, 
             showProjection: true, 
             raytraceDirty: true, 
+
+            showLinesOnPhoto: false,
+
+            // NOUVELLE STRUCTURE POUR LE DESSIN VECTORIEL
+            trajectories: [], 
+            dragPathHandle: null, // Pour savoir quel point de la courbe on modifie
+            currentPath: null,
             
-            teams: { A: { name: 'Locaux', color: '#ef4444' }, B: { name: 'Visiteurs', color: '#3b82f6' } },
-            
+            // Les rosters sont maintenant intégrés aux équipes pour être sauvegardés !
+            teams: { 
+                A: { name: 'Locaux', color: '#ef4444', roster: JSON.parse(JSON.stringify(defaultRoster)) }, 
+                B: { name: 'Visiteurs', color: '#3b82f6', roster: JSON.parse(JSON.stringify(defaultRoster)) } 
+            },
             visibleSports: { hand: true, basket: false, volley: false, minihand: false, minibasket: false },
             
+            // NOUVEAU : 6 points (4 au sol Z=0, et 2 en hauteur Z=2)
             calibPoints: [
-                { id: 'c1', label: "1", photoX: 0, photoY: 0, mapX: 8.5, mapY: 0, offX: -40, offY: -40 },
-                { id: 'c2', label: "2", photoX: 0, photoY: 0, mapX: 11.5, mapY: 0, offX: 40, offY: -40 },
-                { id: 'c3', label: "3", photoX: 0, photoY: 0, mapX: 11.5, mapY: 6, offX: 40, offY: 40 },
-                { id: 'c4', label: "4", photoX: 0, photoY: 0, mapX: 8.5, mapY: 6, offX: -40, offY: 40 }
+                { id: 'c1', label: "Sol G", photoX: 0, photoY: 0, mapX: 8.5, mapY: 0, mapZ: 0, offX: -40, offY: -40 },
+                { id: 'c2', label: "Sol D", photoX: 0, photoY: 0, mapX: 11.5, mapY: 0, mapZ: 0, offX: 40, offY: -40 },
+                { id: 'c3', label: "6m D", photoX: 0, photoY: 0, mapX: 11.5, mapY: 6, mapZ: 0, offX: 40, offY: 40 },
+                { id: 'c4', label: "6m G", photoX: 0, photoY: 0, mapX: 8.5, mapY: 6, mapZ: 0, offX: -40, offY: 40 },
+                { id: 'c5', label: "Lucarne G", photoX: 0, photoY: 0, mapX: 8.5, mapY: 0, mapZ: 2, offX: -40, offY: -80 },
+                { id: 'c6', label: "Lucarne D", photoX: 0, photoY: 0, mapX: 11.5, mapY: 0, mapZ: 2, offX: 40, offY: -80 }
             ],
             
             playersOnPitch: [],
@@ -158,7 +263,10 @@
             dragMap: null,
             pointersPhoto: new Map(),
             pointersMap: new Map(),
-            transforms: { photoToMap: null, mapToPhoto: null, mapToPhotoMatrix: null }
+            transforms: { photoToMap: null, mapToPhoto: null, mapToPhotoMatrix: null },
+
+            ball: null, // stockera { photoX, photoY }
+            ballCarrier: null, // stockera l'ID du joueur porteur
         };
 
         // ==========================================
@@ -184,7 +292,15 @@
             
             flipMapBtn: document.getElementById('flipMapBtn'),
             toggleProjBtn: document.getElementById('toggleProjBtn'),
-            expandMapBtn: document.getElementById('expandMapBtn')
+            expandMapBtn: document.getElementById('expandMapBtn'),
+
+            modeBall: document.getElementById('modeBallBtn'),
+            modeLinesBtn: document.getElementById('modeLinesBtn'),
+
+            modeDrawRun: document.getElementById('modeDrawRunBtn'),
+            modeDrawPass: document.getElementById('modeDrawPassBtn'),
+
+            toggleDebugBtn: document.getElementById('toggleDebugBtn'),
         };
 
         const RAY_RES = 800; 
@@ -216,23 +332,146 @@
             }
         }
 
+        function drawProjectedSports(ctx, transform) {
+            if (!transform) return;
+            
+            // Épaisseur de ligne dynamique : reste fine même si on zoome fort sur l'image !
+            const lw = 2.5 / state.view.zoom; 
+            
+            const pMove = (x, y) => { let p = transform(x, y); if(p) ctx.moveTo(p.x, p.y); };
+            const pLine = (x, y) => { let p = transform(x, y); if(p) ctx.lineTo(p.x, p.y); };
+            
+            // Transforme un arc parfait en de multiples petits segments pour épouser la perspective 3D
+            const pArcLine = (cx, cy, r, start, end, ccw) => {
+                let steps = 40; 
+                let range = end - start;
+                if (ccw && range > 0) range -= 2 * Math.PI;
+                if (!ccw && range < 0) range += 2 * Math.PI;
+                for(let i=0; i<=steps; i++) {
+                    let a = start + range * (i / steps);
+                    pLine(cx + r * Math.cos(a), cy + r * Math.sin(a));
+                }
+            };
+
+            ctx.save();
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+
+            // --- HANDBALL ---
+            if (state.visibleSports.hand) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)'; ctx.lineWidth = lw;
+                ctx.beginPath();
+                pMove(0,0); pLine(20,0); pLine(20,20); pLine(0,20); pLine(0,0); // Cadre du demi-terrain
+                pMove(8.5, 0); pLine(8.5, -0.5); pLine(11.5, -0.5); pLine(11.5, 0); // But
+                pMove(2.5, 0); pArcLine(8.5, 0, 6, Math.PI, Math.PI/2, true); pLine(11.5, 6); pArcLine(11.5, 0, 6, Math.PI/2, 0, true); // Zone 6m
+                ctx.stroke();
+
+                ctx.setLineDash([lw*3, lw*3]); ctx.beginPath(); // Pointillés pour les 9m
+                pMove(8.5 - 9, 0); pArcLine(8.5, 0, 9, Math.PI, Math.PI/2, true); pLine(11.5, 9); pArcLine(11.5, 0, 9, Math.PI/2, 0, true); 
+                ctx.stroke(); ctx.setLineDash([]);
+                
+                ctx.beginPath(); pMove(9.5, 7); pLine(10.5, 7); ctx.stroke(); // Jet de 7m
+                ctx.beginPath(); pMove(9.85, 4); pLine(10.15, 4); ctx.stroke(); // Ligne 4m gardien
+            }
+
+            // --- BASKETBALL ---
+            if (state.visibleSports.basket) {
+                ctx.strokeStyle = 'rgba(220, 38, 38, 0.75)'; ctx.lineWidth = lw;
+                let b = 6;
+                ctx.beginPath();
+                pMove(2.5, b); pLine(17.5, b); pLine(17.5, b+14); pLine(2.5, b+14); pLine(2.5, b); // Demi-terrain
+                pMove(10-2.45, b); pLine(10+2.45, b); pLine(10+2.45, b+5.8); pLine(10-2.45, b+5.8); pLine(10-2.45, b); // Raquette
+                ctx.stroke();
+
+                ctx.beginPath(); pArcLine(10, b+5.8, 1.8, 0, Math.PI, false); ctx.stroke(); // Cercle LF haut
+                ctx.setLineDash([lw*2, lw*2]); ctx.beginPath(); pArcLine(10, b+5.8, 1.8, 0, Math.PI, true); ctx.stroke(); ctx.setLineDash([]); // Cercle LF bas
+                
+                let hoopY = b + 1.575;
+                ctx.beginPath(); pMove(3.4, b); pLine(3.4, b+2.99); pArcLine(10, hoopY, 6.75, 0.2113, Math.PI-0.2113, false); pLine(16.6, b); ctx.stroke(); // 3 pts
+            }
+
+            // --- VOLLEYBALL ---
+            if (state.visibleSports.volley) {
+                ctx.strokeStyle = 'rgba(37, 99, 235, 0.75)'; ctx.lineWidth = lw;
+                ctx.beginPath(); pMove(5.5, 11); pLine(14.5, 11); pLine(14.5, 20); pLine(5.5, 20); pLine(5.5, 11); ctx.stroke();
+                ctx.beginPath(); pMove(5.5, 17); pLine(14.5, 17); ctx.stroke(); // Ligne 3m
+            }
+
+            ctx.restore();
+        }
+
         function renderAll() {
             renderRequested = false;
             updateTransforms();
             
             const ctx = ui.ctx;
             const cvs = ui.mainCanvas;
+            const dpr = window.devicePixelRatio || 1;
+    
+            // On met à l'échelle le contexte
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             
             ctx.fillStyle = '#0f172a';
-            ctx.fillRect(0, 0, cvs.width, cvs.height);
+            // On divise par dpr pour remplir la taille CSS logique
+            ctx.fillRect(0, 0, cvs.width / dpr, cvs.height / dpr);
             
             if (state.image) {
                 ctx.save();
                 ctx.translate(state.view.x, state.view.y);
                 ctx.scale(state.view.zoom, state.view.zoom);
                 ctx.drawImage(state.image, 0, 0);
+                
+                // --- Dessin des lignes en perspective ---
+                if (state.showLinesOnPhoto && state.transforms.mapToPhoto) {
+                    drawProjectedSports(ctx, state.transforms.mapToPhoto);
+                }
+
+                // ==========================================
+                // AFFICHAGE DU DEBUG VISUEL DE L'IA
+                // ==========================================
+                if (state.showAiDebug) {
+                    state.playersOnPitch.forEach(p => {
+                        // console.log("Debug data pour joueur:", p.debug); // Décommentez pour vérifier dans F12
+                        
+                        if (p.debug) {
+                            const lw = 2 / state.view.zoom; // Garde une épaisseur visible
+                            
+                            // 1. La Bounding Box (Cyan)
+                            if (p.debug.bbox) {
+                                ctx.strokeStyle = '#06b6d4'; // Cyan
+                                ctx.lineWidth = lw;
+                                ctx.strokeRect(p.debug.bbox[0], p.debug.bbox[1], p.debug.bbox[2], p.debug.bbox[3]);
+                            }
+
+                            // 2. Le Patch de Couleur (Jaune + Remplissage de la couleur trouvée)
+                            if (p.debug.patch && p.debug.color) {
+                                ctx.strokeStyle = '#eab308'; // Jaune
+                                ctx.lineWidth = lw;
+                                ctx.fillStyle = `rgb(${p.debug.color[0]}, ${p.debug.color[1]}, ${p.debug.color[2]})`;
+                                ctx.beginPath();
+                                ctx.rect(p.debug.patch.x - p.debug.patch.r, p.debug.patch.y - p.debug.patch.r, p.debug.patch.r * 2, p.debug.patch.r * 2);
+                                ctx.fill();
+                                ctx.stroke();
+                            }
+
+                            // 3. Le Squelette (Rouge)
+                            if (p.debug.keypoints) {
+                                ctx.fillStyle = '#ef4444'; // Rouge
+                                p.debug.keypoints.forEach(k => {
+                                    if (k.score > 0.15) {
+                                        ctx.beginPath();
+                                        ctx.arc(k.x, k.y, 4 / state.view.zoom, 0, Math.PI * 2);
+                                        ctx.fill();
+                                    }
+                                });
+                            }
+                        }
+                    })
+                };
+
                 ctx.restore();
             }
+            
 
             const drawItem = (pt, isCalib) => {
                 if (state.mode === 'calib' && !isCalib) ctx.globalAlpha = 0.3;
@@ -256,32 +495,144 @@
                 }
 
                 ctx.font = 'bold 12px sans-serif';
-                let text = isCalib ? `Repère ${pt.label}` : `${pt.num} - ${pt.role}`;
-                const boxW = ctx.measureText(text).width + 16, boxH = 24;
+                
+                // --- NOUVEAU : Gestion Multiligne du texte ---
+                let lines = [];
+                if (isCalib) {
+                    lines = [`Repère ${pt.label}`];
+                } else {
+                    const rawText = `${pt.num} - ${pt.role}`;
+                    const words = rawText.split(' ');
+                    let currentLine = words[0];
+                    for (let i = 1; i < words.length; i++) {
+                        let testLine = currentLine + ' ' + words[i];
+                        // Retour à la ligne si la largeur dépasse 120 pixels
+                        if (ctx.measureText(testLine).width > 120) { 
+                            lines.push(currentLine);
+                            currentLine = words[i];
+                        } else {
+                            currentLine = testLine;
+                        }
+                    }
+                    lines.push(currentLine);
+                }
+
+                const lineHeight = 14;
+                const boxH = (lines.length * lineHeight) + 8; // Hauteur dynamique
+                
+                let maxW = 0;
+                lines.forEach(l => maxW = Math.max(maxW, ctx.measureText(l).width));
+                const boxW = maxW + 16; // Largeur dynamique basée sur la ligne la plus longue
 
                 ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 2;
                 ctx.fillStyle = isCalib ? '#1e293b' : color;
-                if (isHovered && state.dragPhoto.type === 'label') ctx.fillStyle = color;
+                if (isHovered && state.dragPhoto && state.dragPhoto.type === 'label') ctx.fillStyle = color;
                 
+                // Dessin du fond de l'étiquette
                 ctx.beginPath(); ctx.roundRect(scLabel.x - boxW/2, scLabel.y - boxH/2, boxW, boxH, 6); ctx.fill();
                 if (isCalib) { ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke(); }
                 ctx.shadowColor = 'transparent';
 
+                // Dessin des lignes de texte
                 ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(text, scLabel.x, scLabel.y);
+                const startY = scLabel.y - boxH/2 + 4 + lineHeight/2; // Calcul du point de départ Y
+                lines.forEach((line, i) => {
+                    ctx.fillText(line, scLabel.x, startY + (i * lineHeight));
+                });
+                
                 ctx.globalAlpha = 1.0;
             };
 
             state.calibPoints.forEach(p => drawItem(p, true));
             state.playersOnPitch.forEach(p => drawItem(p, false));
 
+            // --- NOUVEAU : Rendu du Ballon sur la photo ---
+            if (state.ball) {
+                let bx, by;
+                if (state.ballCarrier) {
+                    const carrier = state.playersOnPitch.find(p => p.id === state.ballCarrier);
+                    if (carrier) {
+                        const scT = worldToScreen(carrier.photoX, carrier.photoY);
+                        bx = scT.x + 12; // On place le ballon à côté du joueur
+                        by = scT.y - 12;
+                        
+                        // Aura jaune autour du porteur de balle
+                        ctx.beginPath();
+                        ctx.arc(scT.x, scT.y, 14, 0, Math.PI * 2);
+                        ctx.strokeStyle = '#facc15'; // yellow-400
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                    } else {
+                        state.ballCarrier = null; // Sécurité si le joueur a été supprimé
+                    }
+                } 
+                if (!state.ballCarrier) {
+                    const scB = worldToScreen(state.ball.photoX, state.ball.photoY);
+                    bx = scB.x; by = scB.y;
+                }
+                
+                // Dessin du ballon (cercle orange vif)
+                ctx.beginPath();
+                ctx.arc(bx, by, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#f97316'; // orange-500
+                ctx.fill();
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = '#000';
+                ctx.stroke();
+            }
+
+            // --- DESSIN DES TRAJECTOIRES VECTORIELLES SUR PHOTO ---
+            const drawPhotoVectorPath = (t) => {
+                if (!state.transforms.mapToPhoto) return;
+                
+                // Fonction pour échantillonner la courbe de Bézier (20 étapes)
+                const steps = 20;
+                let screenPts = [];
+                for (let i = 0; i <= steps; i++) {
+                    let u = i / steps, u1 = 1 - u;
+                    let lx = u1*u1*t.p0.x + 2*u1*u*t.p1.x + u*u*t.p2.x;
+                    let ly = u1*u1*t.p0.y + 2*u1*u*t.p1.y + u*u*t.p2.y;
+                    
+                    const photoPos = state.transforms.mapToPhoto(lx, ly);
+                    if (photoPos) screenPts.push(worldToScreen(photoPos.x, photoPos.y));
+                }
+
+                if (screenPts.length < 2) return;
+
+                ctx.beginPath();
+                ctx.strokeStyle = t.color;
+                ctx.lineWidth = 3;
+                if (t.type === 'pass') ctx.setLineDash([8, 8]); // Pointillés en perspective
+                
+                ctx.moveTo(screenPts[0].x, screenPts[0].y);
+                for (let i = 1; i < screenPts.length; i++) ctx.lineTo(screenPts[i].x, screenPts[i].y);
+                ctx.stroke(); ctx.setLineDash([]);
+
+                // Pointe de la flèche (basée sur les deux derniers points calculés)
+                let pA = screenPts[screenPts.length - 2], pB = screenPts[screenPts.length - 1];
+                let angle = Math.atan2(pB.y - pA.y, pB.x - pA.x);
+                ctx.beginPath();
+                ctx.moveTo(pB.x, pB.y); ctx.lineTo(pB.x - 15 * Math.cos(angle - 0.5), pB.y - 15 * Math.sin(angle - 0.5));
+                ctx.moveTo(pB.x, pB.y); ctx.lineTo(pB.x - 15 * Math.cos(angle + 0.5), pB.y - 15 * Math.sin(angle + 0.5));
+                ctx.stroke();
+            };
+
+            state.trajectories.forEach(t => drawPhotoVectorPath(t));
+            if (state.currentPath) drawPhotoVectorPath(state.currentPath);
+
             renderMap();
         }
 
         function renderMap() {
-            const mCtx = ui.mapCtx;
-            const cw = ui.mapCanvas.width;
-            const ch = ui.mapCanvas.height;
+            const mCtx = ui.mapCtx;const dpr = window.devicePixelRatio || 1;
+            
+            // On met à l'échelle le contexte
+            mCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            // On récupère la taille logique pour les calculs de la minimap
+            const cw = ui.mapCanvas.width / dpr;
+            const ch = ui.mapCanvas.height / dpr;
+            
             const size = Math.min(cw, ch);
             const scale = size / 20;
             const cx = (cw - size) / 2;
@@ -348,11 +699,17 @@
             if (state.visibleSports.hand) {
                 mCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; mCtx.lineWidth = 2;
                 mCtx.strokeRect(0, 0, size, size);
-                mCtx.fillStyle = 'rgba(255,255,255,0.4)'; mCtx.fillRect(8.5 * scale, 0, 3 * scale, 0.5 * scale); mCtx.strokeRect(8.5 * scale, 0, 3 * scale, 0.5 * scale); 
+                mCtx.fillStyle = 'rgba(255,255,255,0.4)'; 
+                // CORRECTION : On positionne la cage à -0.5 pour qu'elle sorte du terrain !
+                mCtx.fillRect(8.5 * scale, -0.5 * scale, 3 * scale, 0.5 * scale); 
+                mCtx.strokeRect(8.5 * scale, -0.5 * scale, 3 * scale, 0.5 * scale);
                 mCtx.beginPath(); mCtx.arc(8.5*scale, 0, 6*scale, Math.PI, Math.PI/2, true); mCtx.lineTo(11.5*scale, 6*scale); mCtx.arc(11.5*scale, 0, 6*scale, Math.PI/2, 0, true); mCtx.stroke(); 
                 mCtx.setLineDash([4, 4]); mCtx.beginPath(); mCtx.arc(8.5*scale, 0, 9*scale, Math.PI, Math.PI/2, true); mCtx.lineTo(11.5*scale, 9*scale); mCtx.arc(11.5*scale, 0, 9*scale, Math.PI/2, 0, true); mCtx.stroke(); 
                 mCtx.setLineDash([]); mCtx.beginPath(); mCtx.moveTo(9.5*scale, 7*scale); mCtx.lineTo(10.5*scale, 7*scale); mCtx.stroke(); 
                 mCtx.beginPath(); mCtx.moveTo(9.85*scale, 4*scale); mCtx.lineTo(10.15*scale, 4*scale); mCtx.stroke(); 
+
+
+
             }
 
             // --- 2. BASKETBALL ---
@@ -430,17 +787,135 @@
                 mCtx.fillStyle = 'white'; mCtx.font = 'bold 8px sans-serif'; mCtx.textAlign = 'center'; mCtx.textBaseline='middle';
                 mCtx.fillText(p.num, sc.x, sc.y);
             });
+
+            // --- NOUVEAU : Rendu du ballon sur la Minimap ---
+            if (state.ball && transform) {
+                let mPos;
+                if (state.ballCarrier) {
+                    const carrier = state.playersOnPitch.find(p => p.id === state.ballCarrier);
+                    if (carrier) mPos = transform(carrier.photoX, carrier.photoY);
+                } else {
+                    mPos = transform(state.ball.photoX, state.ball.photoY);
+                }
+                
+                if (mPos) {
+                    const sc = getMapScreen(mPos.x, mPos.y);
+                    mCtx.beginPath();
+                    const offset = state.ballCarrier ? 5 : 0; // Décalé si porté
+                    mCtx.arc(sc.x + offset, sc.y - offset, 4, 0, Math.PI * 2);
+                    mCtx.fillStyle = '#f97316';
+                    mCtx.fill();
+                    mCtx.lineWidth = 1;
+                    mCtx.strokeStyle = '#000';
+                    mCtx.stroke();
+                }
+            }
+
+            // --- DESSIN DES TRAJECTOIRES VECTORIELLES SUR MINIMAP ---
+            const drawMapVectorPath = (t, isDrawingMode) => {
+                const s0 = getMapScreen(t.p0.x, t.p0.y);
+                const s1 = getMapScreen(t.p1.x, t.p1.y);
+                const s2 = getMapScreen(t.p2.x, t.p2.y);
+
+                mCtx.beginPath();
+                mCtx.strokeStyle = t.color;
+                mCtx.lineWidth = 3;
+                if (t.type === 'pass') mCtx.setLineDash([6, 6]);
+
+                mCtx.moveTo(s0.x, s0.y);
+                mCtx.quadraticCurveTo(s1.x, s1.y, s2.x, s2.y);
+                mCtx.stroke(); mCtx.setLineDash([]);
+
+                // Pointe de la flèche (Tangente à l'arrivée)
+                let dx = s2.x - s1.x; let dy = s2.y - s1.y;
+                if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) { dx = s2.x - s0.x; dy = s2.y - s0.y; } // Securité
+                let angle = Math.atan2(dy, dx);
+                
+                mCtx.beginPath();
+                mCtx.moveTo(s2.x, s2.y); mCtx.lineTo(s2.x - 12 * Math.cos(angle - 0.5), s2.y - 12 * Math.sin(angle - 0.5));
+                mCtx.moveTo(s2.x, s2.y); mCtx.lineTo(s2.x - 12 * Math.cos(angle + 0.5), s2.y - 12 * Math.sin(angle + 0.5));
+                mCtx.stroke();
+
+                // Si on est en mode édition, on dessine les poignées !
+                if (isDrawingMode) {
+                    mCtx.strokeStyle = 'rgba(255,255,255,0.4)'; mCtx.lineWidth = 1; mCtx.setLineDash([2, 2]);
+                    mCtx.beginPath(); mCtx.moveTo(s0.x, s0.y); mCtx.lineTo(s1.x, s1.y); mCtx.lineTo(s2.x, s2.y); mCtx.stroke(); mCtx.setLineDash([]);
+                    
+                    const drawHandle = (pos, c) => { mCtx.beginPath(); mCtx.arc(pos.x, pos.y, 4, 0, Math.PI*2); mCtx.fillStyle = c; mCtx.fill(); mCtx.stroke(); };
+                    drawHandle(s0, '#22c55e'); // Vert pour le départ
+                    drawHandle(s2, '#ef4444'); // Rouge pour l'arrivée
+                    drawHandle(s1, '#3b82f6'); // Bleu pour la courbure centrale
+                }
+            };
+
+            const isDrawUI = state.mode === 'drawRun' || state.mode === 'drawPass';
+            state.trajectories.forEach(t => drawMapVectorPath(t, isDrawUI));
+            if (state.currentPath) drawMapVectorPath(state.currentPath, true);
+
         }
 
         // ==========================================
         // 4. UI & LOGIQUE DE REDIMENSIONNEMENT
         // ==========================================
-        function resize() {
-            ui.mainCanvas.width = ui.mainCanvas.parentElement.clientWidth;
-            ui.mainCanvas.height = ui.mainCanvas.parentElement.clientHeight;
+
+        // Nouvel état
+        state.isMapDocked = false;
+
+        const dockMapBtn = document.getElementById('dockMapBtn');
+
+        dockMapBtn.addEventListener('click', () => {
+            state.isMapDocked = !state.isMapDocked;
             
-            ui.mapCanvas.width = ui.mapCanvas.parentElement.clientWidth;
-            ui.mapCanvas.height = ui.mapCanvas.parentElement.clientHeight;
+            // Si la carte était en plein écran, on annule le plein écran d'abord
+            // if (state.isMapExpanded) {
+            //     ui.expandMapBtn.click(); 
+            // }
+
+            if (state.isMapDocked) {
+                // --- MODE ANCRÉ (Docked) ---
+                // On retire l'aspect flottant
+                ui.liveMapPanel.classList.remove('absolute', 'top-4', 'right-4', 'rounded-2xl', 'shadow-[0_0_40px_rgba(0,0,0,0.5)]');
+                // On lui donne l'aspect d'une barre latérale
+                ui.liveMapPanel.classList.add('relative', 'border-l', 'rounded-none', 'w-72', 'flex-shrink-0');
+                
+                // On ajuste le conteneur interne pour qu'il prenne la largeur
+                ui.mapContainerWrapper.classList.remove('w-[220px]', 'h-[220px]');
+                ui.mapContainerWrapper.classList.add('w-full', 'aspect-square'); 
+                
+                dockMapBtn.classList.add('text-indigo-400');
+            } else {
+                // --- MODE FLOTTANT (Float) ---
+                // ui.liveMapPanel.classList.add('top-4', 'right-4', 'z-40');
+                // ui.liveMapPanel.classList.remove('inset-2', 'md:inset-10', 'z-50');
+                // ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
+
+                ui.mapContainerWrapper.classList.remove('flex-1', 'w-full', 'h-full');
+                ui.liveMapPanel.classList.add('absolute', 'top-4', 'right-4', 'rounded-2xl', 'shadow-[0_0_40px_rgba(0,0,0,0.5)]');
+                ui.liveMapPanel.classList.remove('relative', 'border-l', 'rounded-none', 'w-72', 'flex-shrink-0');
+                
+                ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
+                ui.mapContainerWrapper.classList.remove('w-full', 'aspect-square');
+                
+                dockMapBtn.classList.remove('text-indigo-400');
+            }
+            
+            // On force un redimensionnement des canvas car l'espace alloué au workspace a changé !
+            setTimeout(resize, 50); // Léger délai pour laisser le DOM s'adapter
+        });
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Canvas Principal
+            const mainRect = ui.mainCanvas.parentElement.getBoundingClientRect();
+            ui.mainCanvas.width = mainRect.width * dpr;
+            ui.mainCanvas.height = mainRect.height * dpr;
+            
+            // Canvas Minimap
+            const mapRect = ui.mapCanvas.parentElement.getBoundingClientRect();
+            ui.mapCanvas.width = mapRect.width * dpr;
+            ui.mapCanvas.height = mapRect.height * dpr;
+            
             requestRender();
         }
 
@@ -450,44 +925,149 @@
 
         ui.expandMapBtn.addEventListener('click', () => {
             state.isMapExpanded = !state.isMapExpanded;
+
             if (state.isMapExpanded) {
-                ui.liveMapPanel.classList.remove('top-4', 'right-4', 'z-40');
-                ui.liveMapPanel.classList.add('inset-2', 'md:inset-10', 'z-50');
-                ui.mapContainerWrapper.classList.remove('w-[220px]', 'h-[220px]');
-                ui.mapContainerWrapper.classList.add('flex-1', 'w-full', 'h-full');
-                ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 14h4v4m0-4l-5 5m11-11h-4V4m0 4l5-5M4 10h4V6m0 4l-5-5m11 11h-4v4m0-4l5 5"></path></svg>';
+                // --- PASSAGE EN PLEIN ÉCRAN ---
+                // 1. On nettoie TOUTES les classes de positionnement (qu'elles soient ancrées ou flottantes)
+                ui.liveMapPanel.classList.remove('top-4', 'right-4', 'w-72', 'relative', 'border-l', 'rounded-none', 'flex-shrink-0');
                 
-                // Afficher le panneau de filtres
+                // 2. On impose les classes du plein écran absolu par-dessus l'interface
+                ui.liveMapPanel.classList.add('absolute', 'inset-2', 'md:inset-10', 'z-50', 'rounded-2xl', 'shadow-[0_0_40px_rgba(0,0,0,0.5)]');
+                
+                // 3. On ajuste le canvas interne
+                ui.mapContainerWrapper.classList.remove('w-[220px]', 'h-[220px]', 'aspect-square');
+                ui.mapContainerWrapper.classList.add('flex-1', 'w-full', 'h-full');
+                
+                // Mise à jour de l'UI
+                ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 14h4v4m0-4l-5 5m11-11h-4V4m0 4l5-5M4 10h4V6m0 4l-5-5m11 11h-4v4m0-4l5 5"></path></svg>';
                 ui.mapControls.classList.remove('hidden');
                 ui.mapControls.classList.add('flex');
-            } else {
-                ui.liveMapPanel.classList.add('top-4', 'right-4', 'z-40');
-                ui.liveMapPanel.classList.remove('inset-2', 'md:inset-10', 'z-50');
-                ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
-                ui.mapContainerWrapper.classList.remove('flex-1', 'w-full', 'h-full');
-                ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>';
                 
-                // Cacher le panneau de filtres
+                // On désactive visuellement le bouton d'ancrage pendant le plein écran pour éviter les bugs
+                if (typeof dockMapBtn !== 'undefined') {
+                    dockMapBtn.disabled = true;
+                    dockMapBtn.classList.add('opacity-30', 'cursor-not-allowed');
+                }
+
+            } else {
+                // --- RETOUR À L'ÉTAT RÉDUIT ---
+                // 1. On enlève les classes du plein écran
+                ui.liveMapPanel.classList.remove('absolute', 'inset-2', 'md:inset-10', 'z-50', 'flex-1', 'w-full', 'h-full');
+                
+                // Mise à jour de l'UI
+                ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>';
                 ui.mapControls.classList.add('hidden');
                 ui.mapControls.classList.remove('flex');
+
+                if (typeof dockMapBtn !== 'undefined') {
+                    dockMapBtn.disabled = false;
+                    dockMapBtn.classList.remove('opacity-30', 'cursor-not-allowed');
+                }
+
+                // 2. On restaure intelligemment le bon mode (Ancré ou Flottant)
+                if (state.isMapDocked) {
+                    ui.liveMapPanel.classList.add('relative', 'w-72', 'border-l', 'rounded-none', 'flex-shrink-0');
+                    ui.mapContainerWrapper.classList.add('w-full', 'aspect-square');
+                } else {
+                    ui.liveMapPanel.classList.add('top-4', 'right-4', 'z-40');
+                    ui.liveMapPanel.classList.remove('inset-2', 'md:inset-10', 'z-50');
+                    ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
+                    ui.mapContainerWrapper.classList.remove('flex-1', 'w-full', 'h-full');
+                    
+                    // ui.liveMapPanel.classList.add('absolute', 'top-4', 'right-4', 'z-40', 'rounded-2xl', 'shadow-[0_0_40px_rgba(0,0,0,0.5)]');
+                    ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
+                }
             }
+            
+            // On réinitialise la vue et on force un rendu
             state.mapView = { x: 0, y: 0, zoom: 1 };
-            resize(); 
+            setTimeout(resize, 50); // Le petit délai laisse le DOM respirer avant de recalculer les dimensions
         });
 
-        const toggleSidebar = () => ui.sidebar.classList.toggle('-translate-x-full');
+        // ui.expandMapBtn.addEventListener('click', () => {
+        //     state.isMapExpanded = !state.isMapExpanded;
+        //     if (state.isMapExpanded) {
+        //         ui.liveMapPanel.classList.remove('top-4', 'right-4', 'z-40');
+        //         ui.liveMapPanel.classList.add('inset-2', 'md:inset-10', 'z-50');
+        //         ui.mapContainerWrapper.classList.remove('w-[220px]', 'h-[220px]');
+        //         ui.mapContainerWrapper.classList.add('flex-1', 'w-full', 'h-full');
+        //         ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 14h4v4m0-4l-5 5m11-11h-4V4m0 4l5-5M4 10h4V6m0 4l-5-5m11 11h-4v4m0-4l5 5"></path></svg>';
+                
+        //         // Afficher le panneau de filtres
+        //         ui.mapControls.classList.remove('hidden');
+        //         ui.mapControls.classList.add('flex');
+        //     } else {
+        //         ui.liveMapPanel.classList.add('top-4', 'right-4', 'z-40');
+        //         ui.liveMapPanel.classList.remove('inset-2', 'md:inset-10', 'z-50');
+        //         ui.mapContainerWrapper.classList.add('w-[220px]', 'h-[220px]');
+        //         ui.mapContainerWrapper.classList.remove('flex-1', 'w-full', 'h-full');
+        //         ui.expandMapBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>';
+                
+        //         // Cacher le panneau de filtres
+        //         ui.mapControls.classList.add('hidden');
+        //         ui.mapControls.classList.remove('flex');
+        //     }
+        //     state.mapView = { x: 0, y: 0, zoom: 1 };
+        //     resize(); 
+        // });
+
+        const toggleSidebar = () => ui.sidebar.classList.toggle('md:hidden');
         ui.teamsBtn.addEventListener('click', toggleSidebar);
         ui.mobileSidebarBtn.addEventListener('click', toggleSidebar);
-        ui.closeSidebarBtn.addEventListener('click', () => ui.sidebar.classList.add('-translate-x-full'));
+        ui.closeSidebarBtn.addEventListener('click', toggleSidebar);
 
         function setMode(mode) {
             state.mode = mode;
-            [ui.modePan, ui.modeCalib, ui.modePlayer].forEach(b => b.className = "px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800");
-            const active = mode === 'pan' ? ui.modePan : (mode === 'calib' ? ui.modeCalib : ui.modePlayer);
-            active.className = "px-4 py-2 text-xs rounded-lg font-bold shadow text-white";
-            active.classList.add(mode === 'pan' ? 'bg-slate-600' : (mode === 'calib' ? 'bg-indigo-600' : 'bg-emerald-600'));
+            [ui.modePan, ui.modeCalib, ui.modePlayer, ui.modeBall, ui.modeDrawRun, ui.modeDrawPass].forEach(b => {
+                if(b) b.className = "px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800";
+            });
+            
+            let active = null;
+            if(mode === 'pan') active = ui.modePan;
+            else if(mode === 'calib') active = ui.modeCalib;
+            else if(mode === 'player') active = ui.modePlayer;
+            else if(mode === 'ball') active = ui.modeBall;
+            else if(mode === 'drawRun') active = ui.modeDrawRun;
+            else if(mode === 'drawPass') active = ui.modeDrawPass;
+            
+            if (active) active.className = "px-4 py-2 text-xs rounded-lg font-bold shadow text-white";
+            
+            if(mode === 'pan') active.classList.add('bg-slate-600');
+            else if(mode === 'calib') active.classList.add('bg-indigo-600');
+            else if(mode === 'player') active.classList.add('bg-emerald-600');
+            else if(mode === 'ball') active.classList.add('bg-orange-600');
+            else if(mode.startsWith('draw')) active.classList.add('bg-yellow-600');
+            
             requestRender();
         }
+
+        
+        // Les écouteurs d'événements :
+        ui.modePan.addEventListener('click', () => setMode('pan'));
+        ui.modeCalib.addEventListener('click', () => setMode('calib'));
+        ui.modePlayer.addEventListener('click', () => setMode('player'));
+        ui.modeDrawRun.addEventListener('click', () => setMode('drawRun'));
+        ui.modeDrawPass.addEventListener('click', () => setMode('drawPass'));
+
+        // ASTUCE : Un double-clic sur le bouton "Tracer" efface tous les dessins !
+        ui.modeDrawRun.addEventListener('dblclick', () => {
+            if(confirm("Effacer toutes les trajectoires ?")) { state.trajectories = []; requestRender(); }
+        });
+        ui.modeDrawPass.addEventListener('dblclick', () => {
+            if(confirm("Effacer toutes les trajectoires ?")) { state.trajectories = []; requestRender(); }
+        });
+
+
+        ui.modeBall.addEventListener('click', () => setMode('ball')); // Ne pas oublier cet EventListener !
+
+        ui.modeLinesBtn.addEventListener('click', () => {
+            state.showLinesOnPhoto = !state.showLinesOnPhoto;
+            ui.modeLinesBtn.className = state.showLinesOnPhoto 
+                ? "px-4 py-2 text-xs rounded-lg transition-colors font-bold shadow text-white bg-indigo-600" 
+                : "px-4 py-2 text-xs rounded-lg transition-colors text-slate-400 hover:text-white hover:bg-slate-800";
+            requestRender();
+        });
+
         ui.modePan.addEventListener('click', () => setMode('pan'));
         ui.modeCalib.addEventListener('click', () => setMode('calib'));
         ui.modePlayer.addEventListener('click', () => setMode('player'));
@@ -505,6 +1085,14 @@
             requestRender(); 
         });
 
+        ui.toggleDebugBtn.addEventListener('click', () => {
+            state.showAiDebug = !state.showAiDebug;
+            const btn = document.getElementById('toggleDebugBtn');
+            btn.classList.toggle('bg-indigo-600', state.showAiDebug);
+            btn.classList.toggle('text-white', state.showAiDebug);
+            requestRender();
+        });
+
         ['A', 'B'].forEach(t => {
             document.getElementById(`colorTeam${t}`).addEventListener('input', e => { state.teams[t].color = e.target.value; requestRender(); });
             document.getElementById(`nameTeam${t}`).addEventListener('input', e => { state.teams[t].name = e.target.value; requestRender(); });
@@ -513,19 +1101,56 @@
         function buildRoster(teamId, containerId) {
             const container = document.getElementById(containerId);
             container.innerHTML = '';
-            ROSTER_TEMPLATE.forEach(p => {
+            
+            // On récupère le roster depuis l'état (donc sauvegardable)
+            const roster = state.teams[teamId].roster;
+            
+            roster.forEach((p, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = "flex gap-1 w-full";
+                
                 const btn = document.createElement('button');
-                btn.className = "bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs text-left p-2 rounded text-slate-300 flex justify-between items-center";
-                btn.innerHTML = `<span class="font-bold w-4">${p.num}</span> <span class="truncate">${p.role}</span>`;
+                btn.className = "flex-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs text-left p-1.5 rounded text-slate-300 flex items-center overflow-hidden";
+                btn.innerHTML = `<span class="font-bold w-5 shrink-0 text-white">${p.num}</span> <span class="truncate">${p.role}</span>`;
                 btn.onclick = () => addPlayerToPitch(teamId, p.num, p.role);
-                container.appendChild(btn);
+                
+                const editBtn = document.createElement('button');
+                editBtn.className = "bg-slate-700 hover:bg-slate-600 px-1.5 rounded text-[10px] text-white border border-slate-600";
+                editBtn.innerHTML = "✏️";
+                editBtn.onclick = () => {
+                    const newNum = prompt("Modifier le numéro :", p.num);
+                    const newRole = prompt("Modifier le Nom / Poste :", p.role);
+                    if (newNum !== null && newNum.trim() !== '') p.num = newNum.trim();
+                    if (newRole !== null && newRole.trim() !== '') p.role = newRole.trim();
+                    buildRoster(teamId, containerId); // Rafraîchit la liste
+                };
+
+                wrapper.appendChild(btn);
+                wrapper.appendChild(editBtn);
+                container.appendChild(wrapper);
             });
+
+            // Bouton pour ajouter un nouveau joueur dans la liste
+            const addBtn = document.createElement('button');
+            addBtn.className = "col-span-2 mt-1 bg-slate-800/50 hover:bg-slate-700 border border-slate-700 border-dashed text-slate-400 text-xs py-1.5 rounded w-full transition-colors";
+            addBtn.innerText = "+ Ajouter un joueur";
+            addBtn.onclick = () => {
+                const newNum = prompt("Numéro du nouveau joueur :");
+                const newRole = prompt("Nom / Poste :");
+                if (newNum && newRole) {
+                    roster.push({ num: newNum.trim(), role: newRole.trim() });
+                    buildRoster(teamId, containerId);
+                }
+            };
+            container.appendChild(addBtn);
         }
+        
         buildRoster('A', 'rosterA'); buildRoster('B', 'rosterB');
 
         function addPlayerToPitch(teamId, num, role) {
             if(!state.image) return alert("Chargez une photo d'abord !");
-            const centerWorld = screenToWorld(ui.mainCanvas.width / 2, ui.mainCanvas.height / 2);
+            const dpr = window.devicePixelRatio || 1;
+            const centerWorld = screenToWorld(ui.mainCanvas.width / (2 * dpr), ui.mainCanvas.height / (2 * dpr));
             state.playersOnPitch.push({ id: 'p' + Date.now(), team: teamId, num: num, role: role, photoX: centerWorld.x, photoY: centerWorld.y, offX: 0, offY: -50 });
             setMode('player');
             if(window.innerWidth < 768) ui.sidebar.classList.add('-translate-x-full');
@@ -552,17 +1177,27 @@
                     state.offscreenData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
                     state.offscreenScale = offScale;
 
+                    // CORRECTION DPR pour le centrage initial de l'image
+                    const dpr = window.devicePixelRatio || 1;
+                    const cssW = ui.mainCanvas.width / dpr;
+                    const cssH = ui.mainCanvas.height / dpr;
                     const padding = 40;
-                    const scale = Math.min((ui.mainCanvas.width - padding) / img.naturalWidth, (ui.mainCanvas.height - padding) / img.naturalHeight);
-                    state.view.zoom = scale;
-                    state.view.x = (ui.mainCanvas.width - img.naturalWidth * scale) / 2;
-                    state.view.y = (ui.mainCanvas.height - img.naturalHeight * scale) / 2;
+                    const scale = Math.min((cssW - padding) / img.naturalWidth, (cssH - padding) / img.naturalHeight);
                     
+                    state.view.zoom = scale;
+                    state.view.x = (cssW - img.naturalWidth * scale) / 2;
+                    state.view.y = (cssH - img.naturalHeight * scale) / 2;
+                    
+                    // --- Initialisation de la position des 6 repères ---
                     const cx = img.naturalWidth / 2, cy = img.naturalHeight / 2, s = Math.min(img.naturalWidth, img.naturalHeight) * 0.2;
-                    state.calibPoints[0].photoX = cx - s; state.calibPoints[0].photoY = cy - s;
-                    state.calibPoints[1].photoX = cx + s; state.calibPoints[1].photoY = cy - s;
-                    state.calibPoints[2].photoX = cx + s; state.calibPoints[2].photoY = cy + s;
-                    state.calibPoints[3].photoX = cx - s; state.calibPoints[3].photoY = cy + s;
+                    state.calibPoints[0].photoX = cx - s; state.calibPoints[0].photoY = cy + s; // Sol G
+                    state.calibPoints[1].photoX = cx + s; state.calibPoints[1].photoY = cy + s; // Sol D
+                    state.calibPoints[2].photoX = cx + s; state.calibPoints[2].photoY = cy + s*2; // 6m D
+                    state.calibPoints[3].photoX = cx - s; state.calibPoints[3].photoY = cy + s*2; // 6m G
+                    if(state.calibPoints[4]) { // Sécurité pour les anciens projets sauvegardés
+                        state.calibPoints[4].photoX = cx - s; state.calibPoints[4].photoY = cy - s; // Lucarne G
+                        state.calibPoints[5].photoX = cx + s; state.calibPoints[5].photoY = cy - s; // Lucarne D
+                    }
                     
                     state.raytraceDirty = true;
                     setMode('calib');
@@ -574,36 +1209,101 @@
         });
 
         // ==========================================
-        // 5. MATHS & TRANSFORMATIONS
+        // 5. MATHS & TRANSFORMATIONS (SOLVEUR 3D BEST FIT)
         // ==========================================
         function worldToScreen(wx, wy) { return { x: wx * state.view.zoom + state.view.x, y: wy * state.view.zoom + state.view.y }; }
         function screenToWorld(sx, sy) { return { x: (sx - state.view.x) / state.view.zoom, y: (sy - state.view.y) / state.view.zoom }; }
 
-        function getHomographyMatrix(src, dst) {
-            let A = [], B = [];
-            for (let i = 0; i < 4; i++) {
-                A.push([src[i].x, src[i].y, 1, 0, 0, 0, -src[i].x * dst[i].x, -src[i].y * dst[i].x]); B.push(dst[i].x);
-                A.push([0, 0, 0, src[i].x, src[i].y, 1, -src[i].x * dst[i].y, -src[i].y * dst[i].y]); B.push(dst[i].y);
-            }
-            let n = 8;
-            for (let i = 0; i < n; i++) {
-                let maxEl = Math.abs(A[i][i]), maxRow = i;
-                for (let k = i+1; k < n; k++) if (Math.abs(A[k][i]) > maxEl) { maxEl = Math.abs(A[k][i]); maxRow = k; }
-                if (maxEl === 0) return null;
-                let tmp = A[maxRow]; A[maxRow] = A[i]; A[i] = tmp;
-                let tmp2 = B[maxRow]; B[maxRow] = B[i]; B[i] = tmp2;
-                for (let k = i+1; k < n; k++) {
-                    let c = -A[k][i] / A[i][i];
-                    for (let j = i; j < n; j++) { if (i === j) A[k][j] = 0; else A[k][j] += c * A[i][j]; }
-                    B[k] += c * B[i];
+        // --- Moteur de calcul Matriciel Pur JS ---
+        const MathUtil = {
+            transpose: (M) => M[0].map((_, c) => M.map(r => r[c])),
+            multiply: (A, B) => {
+                let isVector = !Array.isArray(B[0]);
+                let B_mat = isVector ? B.map(v => [v]) : B;
+                let res = A.map(row => B_mat[0].map((_, j) => row.reduce((sum, val, i) => sum + val * B_mat[i][j], 0)));
+                return isVector ? res.map(row => row[0]) : res;
+            },
+            invert: (M) => { // Algorithme de Gauss-Jordan
+                let n = M.length, A = M.map(r => [...r]), I = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => i === j ? 1 : 0));
+                for (let i = 0; i < n; i++) {
+                    let maxEl = Math.abs(A[i][i]), maxRow = i;
+                    for (let k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > maxEl) { maxEl = Math.abs(A[k][i]); maxRow = k; }
+                    if (maxEl === 0) return null; 
+                    [A[i], A[maxRow]] = [A[maxRow], A[i]];
+                    [I[i], I[maxRow]] = [I[maxRow], I[i]];
+                    let pivot = A[i][i];
+                    for (let j = 0; j < n; j++) { A[i][j] /= pivot; I[i][j] /= pivot; }
+                    for (let k = 0; k < n; k++) {
+                        if (k !== i) {
+                            let factor = A[k][i];
+                            for (let j = 0; j < n; j++) { A[k][j] -= factor * A[i][j]; I[k][j] -= factor * I[i][j]; }
+                        }
+                    }
                 }
+                return I;
+            },
+            solveLeastSquares: (A, B) => {
+                let At = MathUtil.transpose(A);
+                let AtA_inv = MathUtil.invert(MathUtil.multiply(At, A));
+                return AtA_inv ? MathUtil.multiply(AtA_inv, MathUtil.multiply(At, B)) : null;
             }
-            let x = new Array(n).fill(0);
-            for (let i = n-1; i >= 0; i--) {
-                x[i] = B[i] / A[i][i];
-                for (let k = i-1; k >= 0; k--) B[k] -= A[k][i] * x[i];
+        };
+
+        // Raccourci algébrique pour inverser l'Homographie (Évite un 2ème calcul lourd)
+        function invertHomography(h) {
+            let det22 = h[0]*h[4] - h[1]*h[3];
+            if (Math.abs(det22) < 1e-10) return null; 
+            return [
+                (h[4] - h[5]*h[7]) / det22, (h[2]*h[7] - h[1]) / det22, (h[1]*h[5] - h[2]*h[4]) / det22,
+                (h[5]*h[6] - h[3]) / det22, (h[0] - h[2]*h[6]) / det22, (h[2]*h[3] - h[0]*h[5]) / det22,
+                (h[3]*h[7] - h[4]*h[6]) / det22, (h[1]*h[6] - h[0]*h[7]) / det22
+            ];
+        }
+
+        // --- Le "Best Fit" (Gère Dynamiquement la 2D et la 3D avec Normalisation) ---
+        function getBestFitTransform(src, dst) {
+            let points3D = src.filter(p => p.z && Math.abs(p.z) > 0.001);
+            let A = [], B = [];
+            
+            // LE FIX EST ICI : Normalisation des échelles pour la stabilité numérique !
+            // Évite que des pixels comme 3000^2 fassent exploser la précision de la matrice.
+            const scalePhoto = 1000.0; 
+            
+            // Si on a 6 points et qu'on a des points en hauteur (Z=2)
+            if (src.length >= 6 && points3D.length > 0) {
+                // Équations DLT 3D
+                for (let i = 0; i < src.length; i++) {
+                    let X = src[i].x, Y = src[i].y, Z = src[i].z || 0;
+                    let u = dst[i].x / scalePhoto, v = dst[i].y / scalePhoto;
+                    A.push([X, Y, Z, 1, 0, 0, 0, 0, -X*u, -Y*u, -Z*u]); B.push(u);
+                    A.push([0, 0, 0, 0, X, Y, Z, 1, -X*v, -Y*v, -Z*v]); B.push(v);
+                }
+                let p = MathUtil.solveLeastSquares(A, B);
+                if (!p) return null;
+                // Le tour de magie : on extrait la matrice 2D du plan Z=0 et on dé-normalise
+                return [
+                    p[0] * scalePhoto, p[1] * scalePhoto, p[3] * scalePhoto,
+                    p[4] * scalePhoto, p[5] * scalePhoto, p[7] * scalePhoto,
+                    p[8], p[9]
+                ];
+            } else {
+                // Fallback 2D Sécurisé
+                for (let i = 0; i < src.length; i++) {
+                    if (src[i].z && Math.abs(src[i].z) > 0.001) continue;
+                    let X = src[i].x, Y = src[i].y;
+                    let u = dst[i].x / scalePhoto, v = dst[i].y / scalePhoto;
+                    A.push([X, Y, 1, 0, 0, 0, -X*u, -Y*u]); B.push(u);
+                    A.push([0, 0, 0, X, Y, 1, -X*v, -Y*v]); B.push(v);
+                }
+                if (A.length < 8) return null;
+                let p = MathUtil.solveLeastSquares(A, B);
+                if (!p) return null;
+                return [
+                    p[0] * scalePhoto, p[1] * scalePhoto, p[2] * scalePhoto,
+                    p[3] * scalePhoto, p[4] * scalePhoto, p[5] * scalePhoto,
+                    p[6], p[7]
+                ];
             }
-            return x;
         }
 
         function buildTransformFunc(matrix) {
@@ -615,18 +1315,475 @@
         }
 
         function updateTransforms() {
-            const srcPhoto = state.calibPoints.map(p => ({ x: p.photoX, y: p.photoY }));
-            const dstMapLogic = state.calibPoints.map(p => ({ x: p.mapX, y: p.mapY }));
+            const photoPoints = state.calibPoints.map(p => ({ x: p.photoX, y: p.photoY }));
+            const mapPoints = state.calibPoints.map(p => ({ x: p.mapX, y: p.mapY, z: p.mapZ || 0 }));
             
-            state.transforms.mapToPhotoMatrix = getHomographyMatrix(dstMapLogic, srcPhoto);
-            state.transforms.photoToMap = buildTransformFunc(getHomographyMatrix(srcPhoto, dstMapLogic));
-            state.transforms.mapToPhoto = buildTransformFunc(state.transforms.mapToPhotoMatrix);
+            // 1. Calcul de la projection Minimap -> Photo
+            state.transforms.mapToPhotoMatrix = getBestFitTransform(mapPoints, photoPoints);
+            
+            if (state.transforms.mapToPhotoMatrix) {
+                // 2. Inversion Mathématique pure pour Photo -> Minimap (Z=0)
+                const photoToMapMatrix = invertHomography(state.transforms.mapToPhotoMatrix);
+                state.transforms.mapToPhoto = buildTransformFunc(state.transforms.mapToPhotoMatrix);
+                state.transforms.photoToMap = buildTransformFunc(photoToMapMatrix);
+            } else {
+                state.transforms.mapToPhoto = null;
+                state.transforms.photoToMap = null;
+            }
         }
+
+
+        // ==========================================
+        // 5.5 PIPELINE IA MODULAIRE (100% Edge Computing)
+        // ==========================================
+        
+        // Conversion RGB (0-255) vers HSV (0-1)
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, v = max;
+            const d = max - min;
+            s = max === 0 ? 0 : d / max;
+            if (max === min) {
+                h = 0; // achromatique
+            } else {
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [h, s, v];
+        }
+
+        const KMeans = {
+            // Distance pondérée en espace HSV
+            colorDist: function(hsv1, hsv2) {
+                // On calcule la différence de teinte sur un cercle (0 et 1 sont proches)
+                let dh = Math.min(Math.abs(hsv1[0] - hsv2[0]), 1 - Math.abs(hsv1[0] - hsv2[0]));
+                let ds = hsv1[1] - hsv2[1];
+                let dv = hsv1[2] - hsv2[2];
+
+                // PONDÉRATION : La teinte (dh) est 8 fois plus importante que la luminosité (dv)
+                return Math.sqrt((dh * 8) ** 2 + (ds * 2) ** 2 + (dv * 0.5) ** 2);
+            },
+
+            cluster: function(data, k, maxIterations = 15) {
+                if (data.length === 0) return [];
+                
+                // Convertir toutes les couleurs extraites en HSV avant de travailler
+                data.forEach(d => {
+                    if (!d.hsv) d.hsv = rgbToHsv(d.color[0], d.color[1], d.color[2]);
+                });
+
+                // Initialisation : trouver les deux teintes les plus opposées
+                let c1 = data[0].hsv, c2 = data[data.length-1].hsv;
+                let maxD = -1;
+                for(let i=0; i<data.length; i++) {
+                    for(let j=i+1; j<data.length; j++) {
+                        let d = this.colorDist(data[i].hsv, data[j].hsv);
+                        if(d > maxD) { maxD = d; c1 = data[i].hsv; c2 = data[j].hsv; }
+                    }
+                }
+                let centroids = [c1, c2];
+                let assignments = new Array(data.length).fill(0);
+                let changed = true;
+                let iterations = 0;
+
+                while (changed && iterations < maxIterations) {
+                    changed = false; iterations++;
+                    
+                    for (let i = 0; i < data.length; i++) {
+                        let minDist = Infinity;
+                        let bestCluster = 0;
+                        for (let c = 0; c < k; c++) {
+                            let dist = this.colorDist(data[i].hsv, centroids[c]);
+                            if (dist < minDist) { minDist = dist; bestCluster = c; }
+                        }
+                        if (assignments[i] !== bestCluster) { assignments[i] = bestCluster; changed = true; }
+                    }
+
+                    // Recalcul des centres HSV
+                    let newCentroids = Array.from({length: k}, () => [0,0,0]);
+                    let counts = new Array(k).fill(0);
+                    for (let i = 0; i < data.length; i++) {
+                        let cluster = assignments[i];
+                        newCentroids[cluster][0] += data[i].hsv[0];
+                        newCentroids[cluster][1] += data[i].hsv[1];
+                        newCentroids[cluster][2] += data[i].hsv[2];
+                        counts[cluster]++;
+                    }
+                    for (let c = 0; c < k; c++) {
+                        if (counts[c] > 0) {
+                            centroids[c] = [newCentroids[c][0]/counts[c], newCentroids[c][1]/counts[c], newCentroids[c][2]/counts[c]];
+                        }
+                    }
+                }
+                return { assignments };
+            }
+        };
+
+        // // --- Algorithme Mathématique K-Means (Optimisé Perception Humaine) ---
+        // const KMeans = {
+        //     // Formule "Redmean" : Calcule la différence de couleur comme le ferait un œil humain
+        //     colorDist: function(c1, c2) {
+        //         let rmean = (c1[0] + c2[0]) / 2;
+        //         let r = c1[0] - c2[0], g = c1[1] - c2[1], b = c1[2] - c2[2];
+        //         // Poids dynamiques selon la luminosité du rouge
+        //         return Math.sqrt((2 + rmean/256) * r*r + 4 * g*g + (2 + (255-rmean)/256) * b*b);
+        //     },
+
+        //     cluster: function(data, k, maxIterations = 15) {
+        //         if (data.length === 0) return [];
+                
+        //         // 1. INITIALISATION INTELLIGENTE (Trouver les 2 couleurs les plus opposées)
+        //         let c1 = data[0].color, c2 = data[data.length-1].color;
+        //         let maxD = -1;
+        //         for(let i=0; i<data.length; i++) {
+        //             for(let j=i+1; j<data.length; j++) {
+        //                 let d = this.colorDist(data[i].color, data[j].color);
+        //                 if(d > maxD) { maxD = d; c1 = data[i].color; c2 = data[j].color; }
+        //             }
+        //         }
+        //         let centroids = [c1, c2];
+                
+        //         let assignments = new Array(data.length).fill(0);
+        //         let changed = true;
+        //         let iterations = 0;
+
+        //         while (changed && iterations < maxIterations) {
+        //             changed = false;
+        //             iterations++;
+                    
+        //             // 2. Assignation au centre le plus proche (avec la vision humaine)
+        //             for (let i = 0; i < data.length; i++) {
+        //                 let minDist = Infinity;
+        //                 let bestCluster = 0;
+        //                 for (let c = 0; c < k; c++) {
+        //                     let dist = this.colorDist(data[i].color, centroids[c]);
+        //                     if (dist < minDist) { minDist = dist; bestCluster = c; }
+        //                 }
+        //                 if (assignments[i] !== bestCluster) { assignments[i] = bestCluster; changed = true; }
+        //             }
+
+        //             // 3. Recalcul des centres
+        //             let newCentroids = Array.from({length: k}, () => [0,0,0]);
+        //             let counts = new Array(k).fill(0);
+        //             for (let i = 0; i < data.length; i++) {
+        //                 let cluster = assignments[i];
+        //                 newCentroids[cluster][0] += data[i].color[0];
+        //                 newCentroids[cluster][1] += data[i].color[1];
+        //                 newCentroids[cluster][2] += data[i].color[2];
+        //                 counts[cluster]++;
+        //             }
+        //             for (let c = 0; c < k; c++) {
+        //                 if (counts[c] > 0) {
+        //                     centroids[c] = [newCentroids[c][0]/counts[c], newCentroids[c][1]/counts[c], newCentroids[c][2]/counts[c]];
+        //                 }
+        //             }
+        //         }
+        //         return { centroids, assignments };
+        //     }
+        // };
+        
+
+        // --- Le Moteur du Pipeline ---
+        const AIPipeline = {
+            modules: [],
+            
+            // Permet d'ajouter des étapes (Ex: Pose, puis Clustering, puis Tracking...)
+            addModule: function(module) {
+                this.modules.push(module);
+            },
+            
+            // Exécute la chaîne
+            run: async function(context) {
+                console.log("🚀 Démarrage du Pipeline IA...");
+                for (let module of this.modules) {
+                    console.log(`⏳ Exécution du module : ${module.name}`);
+                    await module.execute(context);
+                }
+                console.log("✅ Pipeline IA terminé !");
+                return context;
+            }
+        };
+
+        // --- MODULE 1 : Approche "Top-Down" (Détection Bounding Box -> Zoom -> Squelette) ---
+        const TopDownPoseModule = {
+            name: "Top-Down Pose (COCO-SSD + MoveNet SinglePose)",
+            personDetector: null,
+            poseDetector: null,
+            
+            init: async function() {
+                // 1. Modèle pour trouver les boîtes (ultra robuste aux basses résolutions)
+                if (!this.personDetector) {
+                    this.personDetector = await cocoSsd.load({base: 'lite_mobilenet_v2'}); 
+                }
+                // 2. Modèle pour trouver le squelette DANS la boîte zoomée
+                if (!this.poseDetector) {
+                    const detectorConfig = { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING };
+                    this.poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
+                }
+            },
+
+            execute: async function(context) {
+                await this.init();
+                context.detectedPlayers = [];
+
+                // ÉTAPE 1 : Détecter toutes les personnes (Bounding Boxes)
+                const predictions = await this.personDetector.detect(context.image);
+                // On filtre pour ne garder que la classe 'person' avec un score raisonnable
+                const persons = predictions.filter(p => p.class === 'person' && p.score > 0.2);
+
+                console.log(`IA Étape 1 : COCO-SSD a trouvé ${persons.length} personnes.`);
+
+                // Création d'un canvas caché pour faire nos "crops" virtuels
+                const cropCanvas = document.createElement('canvas');
+                const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+
+                // ÉTAPE 2 : Traiter chaque personne isolément
+                for (let person of persons) {
+                    // On ajoute une petite marge (10%) autour de la boîte pour être sûr de ne pas couper les pieds
+                    const padX = person.bbox[2] * 0.1; 
+                    const padY = person.bbox[3] * 0.1;
+                    
+                    let cx = Math.max(0, person.bbox[0] - padX);
+                    let cy = Math.max(0, person.bbox[1] - padY);
+                    let cw = Math.min(context.image.naturalWidth - cx, person.bbox[2] + padX * 2);
+                    let ch = Math.min(context.image.naturalHeight - cy, person.bbox[3] + padY * 2);
+
+                    // On dessine juste ce joueur sur notre canvas caché
+                    cropCanvas.width = cw;
+                    cropCanvas.height = ch;
+                    cropCtx.drawImage(context.image, cx, cy, cw, ch, 0, 0, cw, ch);
+
+                    // ÉTAPE 3 : Trouver le squelette sur cette image zoomée
+                    const poses = await this.poseDetector.estimatePoses(cropCanvas, { flipHorizontal: false });
+                    
+                    let groundX, groundY;
+                    let torsoColor = [128, 128, 128]; // Couleur neutre par défaut
+
+                    if (poses.length > 0 && poses[0].score > 0.15) {
+                        // SUCCÈS : Le modèle a trouvé un squelette !
+                        const pose = poses[0];
+                        
+                        // Fonction pour récupérer le point et le RE-TRANSLATER dans l'image d'origine
+                        const getPt = (name) => {
+                            let pt = pose.keypoints.find(k => k.name === name);
+                            if(pt) return { x: pt.x + cx, y: pt.y + cy, score: pt.score };
+                            return null;
+                        };
+
+                        const lAnkle = getPt('left_ankle'), rAnkle = getPt('right_ankle');
+                        const lKnee = getPt('left_knee'), rKnee = getPt('right_knee');
+                        const lHip = getPt('left_hip'), rHip = getPt('right_hip');
+                        const lShoulder = getPt('left_shoulder');
+
+                        const conf = 0.2;
+
+                        // Cascade de repli pour trouver le sol
+                        if (lAnkle && rAnkle && lAnkle.score > conf && rAnkle.score > conf) {
+                            groundX = (lAnkle.x + rAnkle.x) / 2; groundY = (lAnkle.y + rAnkle.y) / 2;
+                        } else if (lKnee && rKnee && lKnee.score > conf && rKnee.score > conf) {
+                            groundX = (lKnee.x + rKnee.x) / 2; groundY = Math.max(lKnee.y, rKnee.y) + (ch * 0.2);
+                        } else if (lHip && rHip && lHip.score > conf && rHip.score > conf) {
+                            groundX = (lHip.x + rHip.x) / 2; groundY = Math.max(lHip.y, rHip.y) + (ch * 0.4);
+                        } else {
+                            groundX = cx + cw / 2; groundY = cy + ch; // Repli Bounding Box
+                        }
+                        
+
+
+
+                        // ==========================================
+                        // EXTRACTION DE LA COULEUR DU TORSE (Dynamique & Résiliente)
+                        // ==========================================
+                        // 1. Trouver le vrai centre du torse (même si de profil)
+                        const rShoulder = getPt('right_shoulder');
+                        let validPts = 0, sumX = 0, sumY = 0;
+                        
+                        // On moyenne tous les points du tronc qui ont un bon score
+                        [lShoulder, rShoulder, lHip, rHip].forEach(pt => {
+                            if (pt && pt.score > 0.15) { sumX += pt.x; sumY += pt.y; validPts++; }
+                        });
+
+                        // Par défaut, si l'IA n'a pas vu le tronc, on tape au milieu-haut de la boîte (35% en partant du haut)
+                        let torsoCX = cx + cw / 2; 
+                        let torsoCY = cy + ch * 0.35; 
+                        
+                        if (validPts >= 2) {
+                            torsoCX = sumX / validPts;
+                            torsoCY = sumY / validPts;
+                        }
+
+                        // 2. Calcul du "Patch Radius" Dynamique (Proportionnel à la taille du joueur !)
+                        // On prend ~8% de la hauteur de la Bounding Box du joueur (ch)
+                        // Ex: Joueur 400px (avant-plan) -> patchRadius = 32 -> Carré de 64x64
+                        // Ex: Joueur 50px (arrière-plan) -> patchRadius = 4 -> Carré de 8x8
+                        const patchRadius = Math.max(3, Math.floor(ch * 0.08)); 
+
+                        if (context.imageData) {
+                            let rSum = 0, gSum = 0, bSum = 0, validPixels = 0;
+                            
+                            // On scanne ce carré dynamique (un pixel sur 2 ou 3 selon la taille pour rester ultra-rapide)
+                            const step = patchRadius > 15 ? 3 : (patchRadius > 6 ? 2 : 1);
+
+                            for(let dy = -patchRadius; dy <= patchRadius; dy += step) {
+                                for(let dx = -patchRadius; dx <= patchRadius; dx += step) {
+                                    const px = Math.floor(torsoCX + dx);
+                                    const py = Math.floor(torsoCY + dy);
+                                    
+                                    if (px >= 0 && px < context.imageData.width && py >= 0 && py < context.imageData.height) {
+                                        const idx = (py * context.imageData.width + px) * 4;
+                                        rSum += context.imageData.data[idx];
+                                        gSum += context.imageData.data[idx+1];
+                                        bSum += context.imageData.data[idx+2];
+                                        validPixels++;
+                                    }
+                                }
+                            }
+                            
+                            if (validPixels > 0) {
+                                torsoColor = [
+                                    Math.round(rSum / validPixels), 
+                                    Math.round(gSum / validPixels), 
+                                    Math.round(bSum / validPixels)
+                                ];
+                            }
+                        }
+
+                        
+                    } else {
+                        // ÉCHEC SQUELETTE : Solution de repli absolue !
+                        // Si le joueur est trop loin/flou pour avoir un squelette, on utilise la boîte du COCO-SSD !
+                        // On prend le centre bas de la Bounding Box.
+                        groundX = cx + cw / 2;
+                        groundY = cy + ch - padY; 
+                    }
+
+                    // --- NOUVEAU : Sauvegarde des données pour le DEBUG VISUEL ---
+                    let adjustedKeypoints = [];
+                    if (poses.length > 0 && poses[0].score > 0.15) {
+                        // On re-translate les points du squelette dans les coordonnées de l'image d'origine
+                        adjustedKeypoints = poses[0].keypoints.map(k => ({ x: k.x + cx, y: k.y + cy, score: k.score, name: k.name }));
+                    }
+
+                    // Ajout du joueur au contexte avec son objet "debug"
+                    context.detectedPlayers.push({
+                        photoX: groundX, 
+                        photoY: groundY, 
+                        color: torsoColor,
+                        debug: {
+                            bbox: person.bbox, // [x, y, w, h]
+                            keypoints: adjustedKeypoints,
+                            patch: { 
+                                // Sécurité si les variables n'ont pas été définies (échec squelette)
+                                x: typeof torsoCX !== 'undefined' ? torsoCX : cx + cw / 2, 
+                                y: typeof torsoCY !== 'undefined' ? torsoCY : cy + ch * 0.35, 
+                                r: typeof patchRadius !== 'undefined' ? patchRadius : Math.max(3, Math.floor(ch * 0.08))
+                            },
+                            color: torsoColor
+                        }
+                    });
+                } // <-- Fin de la boucle "for (let person of persons)"
+            }
+        };
+        
+
+        // --- MODULE 2 : Clustering des Équipes ---
+        const TeamClusteringModule = {
+            name: "Color Clustering (K-Means en HSV Space)",
+            execute: async function(context) {
+                if (!context.detectedPlayers || context.detectedPlayers.length === 0) return;
+                
+                // On passe les données au KMeans qui gère maintenant le HSV en interne
+                const result = KMeans.cluster(context.detectedPlayers, 2);
+                
+                context.detectedPlayers.forEach((player, i) => {
+                    player.team = result.assignments[i] === 0 ? 'A' : 'B';
+                });
+            }
+        };
+
+        // Enregistrement des modules dans le Pipeline
+        AIPipeline.modules = []; // On nettoie au cas où
+        AIPipeline.addModule(TopDownPoseModule);
+        AIPipeline.addModule(TeamClusteringModule);
+
+        // --- Déclenchement du Pipeline IA ---
+        document.getElementById('modeAutoBtn').addEventListener('click', async () => {
+            if (!state.image) return alert("Veuillez d'abord charger une photo !");
+            if (!state.transforms.photoToMap) return alert("Veuillez d'abord calibrer vos 6 repères pour que l'IA puisse projeter les joueurs sur la carte 2D !");
+
+            const btn = document.getElementById('modeAutoBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "⏳ Analyse en cours...";
+            btn.disabled = true;
+
+            try {
+                // Création du contexte de travail pour le pipeline
+                const context = {
+                    image: state.image,
+                    // On utilise le offscreenData qu'on a déjà généré au chargement de l'image
+                    imageData: state.offscreenData, 
+                    detectedPlayers: []
+                };
+
+                // Exécution asynchrone du pipeline
+                await AIPipeline.run(context);
+
+                // Traduction des résultats IA vers l'état de l'application
+                if (context.detectedPlayers.length > 0) {
+                    if (confirm(`L'IA a détecté ${context.detectedPlayers.length} joueurs. Voulez-vous les ajouter au terrain ? (Cela remplacera les joueurs actuels)`)) {
+                        
+                        state.playersOnPitch = []; // On nettoie
+                        
+                        context.detectedPlayers.forEach((p, index) => {
+                            // On crée l'objet joueur final
+                            state.playersOnPitch.push({
+                                id: 'p_ai_' + Date.now() + index,
+                                team: p.team, // 'A' ou 'B' trouvé par le Clustering
+                                num: '?', // À compléter manuellement par le coach
+                                role: 'Auto',
+                                photoX: p.photoX, 
+                                photoY: p.photoY,
+                                offX: 0, offY: -50,
+                                debug: p.debug // <--- INDISPENSABLE POUR L'AFFICHAGE !
+                            });
+                        });
+
+                        
+                        setMode('player'); // On bascule en mode Joueur pour voir le résultat
+                        requestRender();
+                    }
+                } else {
+                    alert("L'IA n'a détecté aucun joueur assez net.");
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Erreur lors de l'exécution de l'IA. Vérifiez la console.");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+
 
         // ==========================================
         // 6. INTERACTIONS SOURIS/TACTILE
         // ==========================================
         function getPos(e, cvs) { const r = cvs.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
+        // --- Auto-collapse de la barre latérale ---
+        ui.mainCanvas.addEventListener('pointerdown', () => {
+            // Si la fenêtre est plus petite qu'un écran de bureau (1024px)
+            // if (window.innerWidth < 1024) {
+            //     ui.sidebar.classList.add('-translate-x-full');
+            // }
+            ui.sidebar.classList.add('-translate-x-full');
+        });
 
         // --- Photo Interactions ---
         function hitTestPhoto(x, y) {
@@ -651,10 +1808,160 @@
             requestRender();
         }
 
+        // ==========================================
+        // SYSTÈME D'ÉDITION PAR MODAL CONTEXTUEL
+        // ==========================================
+        const modal = document.getElementById('contextModal');
+        let activeObject = null; // Stocke l'objet en cours d'édition
+
+        ui.mainCanvas.addEventListener('dblclick', e => {
+            const pos = getPos(e, ui.mainCanvas);
+            const hit = hitTestPhoto(pos.x, pos.y);
+            const worldPos = screenToWorld(pos.x, pos.y);
+            
+            activeObject = hit ? hit.obj : null;
+            
+            // Positionnement du modal près du clic
+            modal.style.display = 'block';
+            modal.style.left = Math.min(pos.x + 10, window.innerWidth - 240) + 'px';
+            modal.style.top = Math.min(pos.y + 10, window.innerHeight - 300) + 'px';
+
+            const actions = document.getElementById('modalActions');
+            const pInputs = document.getElementById('playerInputs');
+            const cInputs = document.getElementById('calibInputs');
+            const title = document.getElementById('modalTitle');
+            actions.innerHTML = '';
+            pInputs.classList.add('hidden');
+            cInputs.classList.add('hidden');
+
+            if (hit) {
+                // --- CAS 1 : ÉDITION OBJET EXISTANT ---
+                if (hit.obj.team) { // C'est un Joueur
+                    title.innerText = "Édition Joueur";
+                    pInputs.classList.remove('hidden');
+                    document.getElementById('editNum').value = hit.obj.num;
+                    document.getElementById('editRole').value = hit.obj.role;
+
+                    addModalBtn(actions, "🔄 Inverser l'équipe", "bg-indigo-600 hover:bg-indigo-500 text-white", () => {
+                        hit.obj.team = hit.obj.team === 'A' ? 'B' : 'A';
+                        closeModal();
+                    });
+                    addModalBtn(actions, "💾 Enregistrer", "bg-emerald-600 hover:bg-emerald-500 text-white", () => {
+                        hit.obj.num = document.getElementById('editNum').value;
+                        hit.obj.role = document.getElementById('editRole').value;
+                        closeModal();
+                    });
+                    addModalBtn(actions, "🗑️ Supprimer", "bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white", () => {
+                        state.playersOnPitch = state.playersOnPitch.filter(p => p.id !== hit.obj.id);
+                        closeModal();
+                    });
+                } else { // C'est un Repère
+                    title.innerText = "Édition Repère";
+                    cInputs.classList.remove('hidden');
+                    document.getElementById('editLabel').value = hit.obj.label;
+
+                    addModalBtn(actions, "💾 Renommer", "bg-emerald-600 hover:bg-emerald-500 text-white", () => {
+                        hit.obj.label = document.getElementById('editLabel').value;
+                        closeModal();
+                    });
+                    addModalBtn(actions, "🗑️ Supprimer", "bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white", () => {
+                        state.calibPoints = state.calibPoints.filter(p => p.id !== hit.obj.id);
+                        state.raytraceDirty = true;
+                        closeModal();
+                    });
+                }
+            } else {
+                // --- CAS 2 : AJOUT NOUVEL OBJET (ESPACE VIDE) ---
+                if (state.mode === 'player') {
+                    title.innerText = "Nouveau Joueur";
+                    pInputs.classList.remove('hidden');
+                    document.getElementById('editNum').value = "";
+                    document.getElementById('editRole').value = "";
+                    
+                    ['A', 'B'].forEach(t => {
+                        const teamName = state.teams[t].name;
+                        const color = state.teams[t].color;
+                        addModalBtn(actions, `➕ Ajouter à ${teamName}`, "bg-slate-700 hover:bg-slate-600 text-white", () => {
+                            state.playersOnPitch.push({
+                                id: 'p' + Date.now(), team: t,
+                                num: document.getElementById('editNum').value || "?",
+                                role: document.getElementById('editRole').value || "Joueur",
+                                photoX: worldPos.x, photoY: worldPos.y, offX: 0, offY: -50
+                            });
+                            closeModal();
+                        });
+                    });
+                } else if (state.mode === 'calib') {
+                    title.innerText = "Nouveau Repère";
+                    cInputs.classList.remove('hidden');
+                    document.getElementById('editLabel').value = "";
+                    addModalBtn(actions, "➕ Créer le repère", "bg-indigo-600 hover:bg-indigo-500 text-white", () => {
+                        state.calibPoints.push({
+                            id: 'c' + Date.now(), label: document.getElementById('editLabel').value || "Point",
+                            photoX: worldPos.x, photoY: worldPos.y, mapX: 10, mapY: 10, mapZ: 0, offX: 0, offY: -40
+                        });
+                        state.raytraceDirty = true;
+                        closeModal();
+                    });
+                } else {
+                    modal.style.display = 'none'; // Pas de modal dans les autres modes
+                }
+            }
+        });
+
+        function addModalBtn(container, text, classes, onClick) {
+            const btn = document.createElement('button');
+            btn.className = `modal-btn ${classes}`;
+            btn.innerHTML = text;
+            btn.onclick = onClick;
+            container.appendChild(btn);
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+            requestRender();
+        }
+
+        // Fermer le modal si on clique ailleurs sur le canvas
+        ui.mainCanvas.addEventListener('pointerdown', () => {
+            if (modal.style.display === 'block') closeModal();
+        });
+
+
+        const getMapLogicPos = (pos) => {
+            const dpr = window.devicePixelRatio || 1;
+            const cw = ui.mapCanvas.width / dpr, ch = ui.mapCanvas.height / dpr;
+            const size = Math.min(cw, ch), scale = size / 20;
+            const cx = (cw - size) / 2, cy = (ch - size) / 2;
+            let logicX = (pos.x - cx - state.mapView.x) / (state.mapView.zoom * scale);
+            let logicY = (pos.y - cy - state.mapView.y) / (state.mapView.zoom * scale);
+            if (state.isMapFlipped) { logicX = 20 - logicX; logicY = 20 - logicY; }
+            return { x: logicX, y: logicY };
+        };
+
         ui.mainCanvas.addEventListener('pointerdown', e => {
             state.pointersPhoto.set(e.pointerId, e);
+            const pos = getPos(e, ui.mainCanvas);
+
+            // --- NOUVEAU : Gestion du clic en mode Ballon ---
+            if (state.mode === 'ball' && state.pointersPhoto.size === 1) {
+                const worldPos = screenToWorld(pos.x, pos.y);
+                state.ball = { photoX: worldPos.x, photoY: worldPos.y };
+                state.ballCarrier = null; // Réinitialise le porteur
+                
+                // Vérifier si le ballon a été posé sur un joueur (rayon de 30px)
+                for (let p of state.playersOnPitch) {
+                    const scT = worldToScreen(p.photoX, p.photoY);
+                    if (Math.hypot(pos.x - scT.x, pos.y - scT.y) < 30) {
+                        state.ballCarrier = p.id; // Ce joueur devient le porteur !
+                        break;
+                    }
+                }
+                requestRender();
+                return; // On arrête là pour ne pas déclencher le drag
+            }
+
             if (state.pointersPhoto.size === 1) {
-                const pos = getPos(e, ui.mainCanvas);
                 const hit = hitTestPhoto(pos.x, pos.y);
                 if (hit) {
                     ui.mainCanvas.setPointerCapture(e.pointerId);
@@ -663,6 +1970,7 @@
                 }
             }
         });
+
 
         ui.mainCanvas.addEventListener('pointermove', e => {
             if (!state.pointersPhoto.has(e.pointerId)) return;
@@ -709,7 +2017,9 @@
         // --- Map Interactions ---
         function hitTestMap(x, y) {
             if (state.mode === 'pan') return null;
-            const cw = ui.mapCanvas.width, ch = ui.mapCanvas.height;
+            // CORRECTION DPR: On utilise la taille logique (CSS) pour coller avec les coordonnées de la souris
+            const dpr = window.devicePixelRatio || 1;
+            const cw = ui.mapCanvas.width / dpr, ch = ui.mapCanvas.height / dpr;
             const size = Math.min(cw, ch), scale = size / 20;
             const cx = (cw - size) / 2, cy = (ch - size) / 2;
 
@@ -742,7 +2052,49 @@
 
         ui.mapCanvas.addEventListener('pointerdown', e => {
             state.pointersMap.set(e.pointerId, e);
-            if (state.pointersMap.size === 1) {
+            const pos = getPos(e, ui.mapCanvas);
+            
+            // --- NOUVEAU : Création ou Édition de Courbe ---
+            const isDrawMode = state.mode === 'drawRun' || state.mode === 'drawPass';
+            const lPos = getMapLogicPos(pos);
+
+            if (isDrawMode && state.pointersMap.size === 1) {
+                ui.mapCanvas.setPointerCapture(e.pointerId);
+                
+                // CORRECTION DPR: Calcul de la distance d'accroche
+                const dpr = window.devicePixelRatio || 1;
+                const cw = ui.mapCanvas.width / dpr, ch = ui.mapCanvas.height / dpr;
+                const size = Math.min(cw, ch), scale = size / 20;
+                const hitDist = 20 / (state.mapView.zoom * scale); 
+                
+                // 1. Essayer d'attraper une poignée existante (Hit Test)
+                state.dragPathHandle = null;
+                for (let i = state.trajectories.length - 1; i >= 0; i--) {
+                    const t = state.trajectories[i];
+                    // Priorité à la courbure centrale (p1) si les points sont proches
+                    if (Math.hypot(lPos.x - t.p1.x, lPos.y - t.p1.y) < hitDist) { state.dragPathHandle = { t, pt: 'p1' }; break; }
+                    if (Math.hypot(lPos.x - t.p2.x, lPos.y - t.p2.y) < hitDist) { state.dragPathHandle = { t, pt: 'p2' }; break; }
+                    if (Math.hypot(lPos.x - t.p0.x, lPos.y - t.p0.y) < hitDist) { state.dragPathHandle = { t, pt: 'p0' }; break; }
+                }
+
+                // 2. Si on n'a rien attrapé, on CRÉE une nouvelle trajectoire
+                if (!state.dragPathHandle) {
+                
+                    const type = state.mode === 'drawPass' ? 'pass' : 'run';
+                    const color = type === 'pass' ? '#facc15' : '#38bdf8'; // Jaune = Passe, Bleu = Course
+                    state.currentPath = {
+                        id: 't' + Date.now(), type: type, color: color,
+                        p0: { x: lPos.x, y: lPos.y },
+                        p1: { x: lPos.x, y: lPos.y }, // Au début, p1 est confondu avec le départ
+                        p2: { x: lPos.x, y: lPos.y }
+                    };
+                }
+                requestRender();
+                return;
+            }
+
+
+            if (!isDrawMode && state.pointersMap.size === 1) {
                 const pos = getPos(e, ui.mapCanvas);
                 const hit = hitTestMap(pos.x, pos.y);
                 if (hit) { ui.mapCanvas.setPointerCapture(e.pointerId); state.dragMap = hit; requestRender(); }
@@ -754,10 +2106,34 @@
             const prev = state.pointersMap.get(e.pointerId);
             state.pointersMap.set(e.pointerId, e);
             const pos = getPos(e, ui.mapCanvas);
+            const isDrawMode = state.mode === 'drawRun' || state.mode === 'drawPass';
 
+
+            // --- NOUVEAU : Suivi de la souris pour la courbe ---
+            if (isDrawMode && state.pointersMap.size === 1) {
+                const lPos = getMapLogicPos(pos);
+                
+                if (state.dragPathHandle) {
+                    // Modification a posteriori (on déplace p0, p1 ou p2)
+                    state.dragPathHandle.t[state.dragPathHandle.pt] = { x: lPos.x, y: lPos.y };
+                } else if (state.currentPath) {
+                    // Création en cours : p2 suit la souris, p1 reste exactement au milieu (droite parfaite)
+                    state.currentPath.p2 = { x: lPos.x, y: lPos.y };
+                    state.currentPath.p1 = { 
+                        x: (state.currentPath.p0.x + state.currentPath.p2.x) / 2, 
+                        y: (state.currentPath.p0.y + state.currentPath.p2.y) / 2 
+                    };
+                }
+                requestRender();
+                return;
+            }
+            
             if (state.dragMap && state.pointersMap.size === 1) {
-                const cw = ui.mapCanvas.width, ch = ui.mapCanvas.height, size = Math.min(cw, ch), scale = size / 20;
+                const dpr = window.devicePixelRatio || 1;
+                const cw = ui.mapCanvas.width / dpr, ch = ui.mapCanvas.height / dpr;
+                const size = Math.min(cw, ch), scale = size / 20;
                 const cx = (cw - size) / 2, cy = (ch - size) / 2;
+                
                 let logicX = (pos.x - cx - state.mapView.x) / (state.mapView.zoom * scale);
                 let logicY = (pos.y - cy - state.mapView.y) / (state.mapView.zoom * scale);
                 if (state.isMapFlipped) { logicX = 20 - logicX; logicY = 20 - logicY; }
@@ -792,11 +2168,344 @@
             }
         });
 
-        const endMap = e => { state.pointersMap.delete(e.pointerId); if(state.pointersMap.size===0) state.dragMap = null; requestRender(); };
+        const endMap = e => { 
+            state.pointersMap.delete(e.pointerId); 
+            if(state.pointersMap.size === 0) {
+                state.dragMap = null;
+                state.dragPathHandle = null;
+                
+                // Valider la nouvelle trajectoire (si elle est assez longue)
+                if (state.currentPath) {
+                    if (Math.hypot(state.currentPath.p0.x - state.currentPath.p2.x, state.currentPath.p0.y - state.currentPath.p2.y) > 0.5) {
+                        state.trajectories.push(state.currentPath);
+                    }
+                    state.currentPath = null;
+                }
+            }
+            requestRender(); 
+        };
+        // const endMap = e => { state.pointersMap.delete(e.pointerId); if(state.pointersMap.size===0) state.dragMap = null; requestRender(); };
         ['pointerup', 'pointercancel', 'pointerleave'].forEach(evt => ui.mapCanvas.addEventListener(evt, endMap));
         ui.mapCanvas.addEventListener('wheel', e => { e.preventDefault(); const pos = getPos(e, ui.mapCanvas); applyMapZoom(e.deltaY > 0 ? 0.9 : 1.1, pos.x, pos.y); }, { passive: false });
+        
+        // ==========================================
+        // 7. GESTION DE PROJET (SAUVEGARDER / CHARGER / PDF)
+        // ==========================================
+
+        // --- Sauvegarder un Projet (.json) ---
+        document.getElementById('saveProjectBtn').addEventListener('click', () => {
+            if (!state.image) return alert("Veuillez d'abord charger une image et créer une analyse.");
+            
+            // Convertir l'image d'origine en base64 pour l'inclure dans le fichier
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = state.image.naturalWidth;
+            tempCanvas.height = state.image.naturalHeight;
+            tempCanvas.getContext('2d').drawImage(state.image, 0, 0);
+            const base64Image = tempCanvas.toDataURL('image/jpeg', 0.85); // 85% de qualité pour limiter la taille
+
+            const projectData = {
+                version: "11.0",
+                image: base64Image,
+                teams: state.teams,
+                visibleSports: state.visibleSports,
+                calibPoints: state.calibPoints.map(p => ({...p})), // Clone
+                playersOnPitch: state.playersOnPitch.map(p => ({...p})), // Clone
+                view: state.view,
+                mapView: state.mapView
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `Analyse_Tactique_${new Date().getTime()}.json`);
+            dlAnchorElem.click();
+        });
+
+        // --- Charger un Projet (.json) ---
+        document.getElementById('loadProjectInput').addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = event => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    
+                    // Restaurer les données métier
+                    state.teams = data.teams || state.teams;
+
+                    // --- NOUVEAU : On force le rafraichissement du HTML latéral
+                    buildRoster('A', 'rosterA');
+                    buildRoster('B', 'rosterB');
+
+                    state.visibleSports = data.visibleSports || state.visibleSports;
+                    state.calibPoints = data.calibPoints || state.calibPoints;
+                    state.playersOnPitch = data.playersOnPitch || state.playersOnPitch;
+                    state.view = data.view || state.view;
+                    state.mapView = data.mapView || state.mapView;
+
+                    // Mettre à jour l'UI des filtres de sport
+                    ['hand', 'basket', 'volley', 'minihand', 'minibasket'].forEach(sport => {
+                        const el = document.getElementById(`chk${sport.charAt(0).toUpperCase() + sport.slice(1)}`);
+                        if(el) el.checked = state.visibleSports[sport];
+                    });
+
+                    // Mettre à jour l'UI des équipes
+                    document.getElementById('nameTeamA').value = state.teams.A.name;
+                    document.getElementById('colorTeamA').value = state.teams.A.color;
+                    document.getElementById('nameTeamB').value = state.teams.B.name;
+                    document.getElementById('colorTeamB').value = state.teams.B.color;
+
+                    // Restaurer l'image
+                    const img = new Image();
+                    img.onload = () => {
+                        state.image = img;
+                        
+                        // Recalculer le Offscreen pour le Raytracing
+                        const offCanvas = document.createElement('canvas');
+                        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+                        const maxDim = 800; 
+                        const offScale = Math.min(maxDim / img.naturalWidth, maxDim / img.naturalHeight, 1);
+                        offCanvas.width = img.naturalWidth * offScale;
+                        offCanvas.height = img.naturalHeight * offScale;
+                        offCtx.drawImage(img, 0, 0, offCanvas.width, offCanvas.height);
+                        state.offscreenData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+                        state.offscreenScale = offScale;
+
+                        state.raytraceDirty = true;
+                        updateTransforms();
+                        requestRender();
+                        alert("Projet chargé avec succès !");
+                    };
+                    img.src = data.image;
+
+                } catch (err) {
+                    alert("Erreur: Fichier de projet invalide ou corrompu.");
+                    console.error(err);
+                }
+                // Réinitialiser l'input
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+
+        // --- Exporter en PDF A4 (Gabarit Croisé & Canvas Virtuels 100% Fiables) ---
+        document.getElementById('exportPdfBtn').addEventListener('click', async () => {
+            if (!state.image) return alert("Veuillez d'abord charger une image et créer une analyse.");
+            if (!window.jspdf) return alert("La librairie PDF est en cours de chargement. Veuillez patienter.");
+
+            // 1. TECHNIQUE DES CANVAS VIRTUELS (Évite les conflits de DPR et CSS)
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Sauvegarde des références DOM originales
+            const origMain = ui.mainCanvas;
+            const origCtx = ui.ctx;
+            const origMap = ui.mapCanvas;
+            const origMapCtx = ui.mapCtx;
+            
+            // Création des canvas fantômes (non attachés au DOM = inviolables)
+            const vMain = document.createElement('canvas');
+            const vCtx = vMain.getContext('2d');
+            const vMap = document.createElement('canvas');
+            const vMapCtx = vMap.getContext('2d');
+            
+            // Résolution fixe (1024px) avec compensation parfaite du DPR
+            const exportWidth = 1024;
+            const exportScale = exportWidth / state.image.naturalWidth;
+            
+            vMain.width = exportWidth * dpr;
+            vMain.height = state.image.naturalHeight * exportScale * dpr;
+            vMap.width = 800 * dpr;
+            vMap.height = 800 * dpr;
+            
+            // Infiltration temporaire dans l'objet UI pour tromper renderAll()
+            ui.mainCanvas = vMain;
+            ui.ctx = vCtx;
+            ui.mapCanvas = vMap;
+            ui.mapCtx = vMapCtx;
+            
+            // Sauvegarde de l'état interactif
+            const oldView = { ...state.view };
+            const oldMapView = { ...state.mapView };
+            
+            // Cadrage parfait (zéro pan, zoom adéquat)
+            state.view = { x: 0, y: 0, zoom: exportScale };
+            state.mapView = { x: 0, y: 0, zoom: 1 };
+            
+            // Rendu silencieux sur les canvas virtuels
+            renderAll();
+            
+            // Extraction des images nettes et proportionnées
+            const mainImgData = vMain.toDataURL('image/jpeg', 0.95);
+            const mapImgData = vMap.toDataURL('image/jpeg', 0.95);
+            
+            // Restauration immédiate de l'application (l'utilisateur ne voit aucun clignotement)
+            ui.mainCanvas = origMain;
+            ui.ctx = origCtx;
+            ui.mapCanvas = origMap;
+            ui.mapCtx = origMapCtx;
+            state.view = oldView;
+            state.mapView = oldMapView;
+            
+            requestRender(); // Remet l'écran à jour
+
+            // ==========================================
+            // 2. GÉNÉRATION DU PDF (Layout Adaptatif Optimisé)
+            // ==========================================
+            const { jsPDF } = window.jspdf;
+            
+            const isPhotoPortrait = state.image.naturalHeight > state.image.naturalWidth;
+            const pdfOrientation = isPhotoPortrait ? 'l' : 'p';
+            const doc = new jsPDF(pdfOrientation, 'mm', 'a4'); 
+            
+            // --- EN-TÊTE ---
+            doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(30, 41, 59);
+            doc.text(`Analyse Tactique : ${state.teams.A.name} vs ${state.teams.B.name}`, 15, 20);
+            
+            doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 116, 139);
+            doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`, 15, 26);
+            
+            doc.setDrawColor(203, 213, 225); doc.setLineWidth(0.5);
+            doc.line(15, 30, isPhotoPortrait ? 282 : 195, 30);
+
+            // --- MOTEUR DE MISE EN PAGE RÉACTIF ---
+            const imgRatio = state.image.naturalHeight / state.image.naturalWidth;
+            let photoX, photoY, photoW, photoH;
+            let mapX, mapY, mapSize;
+            let listX, listY;
+            let rightSectionW; // Largeur de la zone de droite allouée à la map et la liste
+
+            if (isPhotoPortrait) {
+                // --- GABARIT PAYSAGE (Photo à G, Map GÉANTE en H à D, Liste 4 Col en B à D) ---
+                const maxPhotoH = 160; 
+                const maxPhotoW = 140; // On laisse pas mal de place à droite
+
+                photoH = maxPhotoH; photoW = photoH / imgRatio;
+                if (photoW > maxPhotoW) { photoW = maxPhotoW; photoH = photoW * imgRatio; }
+
+                photoX = 15; photoY = 35 + (maxPhotoH - photoH) / 2;
+
+                const rightSectionX = photoX + photoW + 10;
+                rightSectionW = (297 - 15) - rightSectionX;
+                
+                // On réserve ~35mm de hauteur en bas pour les 4 colonnes de la liste
+                const maxMapH = maxPhotoH - 35; 
+                
+                // La minimap prend le maximum d'espace possible dans ce rectangle
+                mapSize = Math.min(rightSectionW, maxMapH);
+                
+                // Centrage horizontal de la map dans sa zone droite
+                mapX = rightSectionX + (rightSectionW - mapSize) / 2;
+                mapY = 35; 
+
+                listX = rightSectionX; // La liste démarre alignée à gauche de la zone droite
+                listY = mapY + mapSize + 8; // Juste sous la minimap
+            } else {
+                // --- GABARIT PORTRAIT (Photo en H, Map en B à G, Liste 1 Colonne en B à D) ---
+                const maxPhotoW = 180; 
+                const maxPhotoH = 155; 
+                const listWidthPortrait = 45;
+                
+                photoW = maxPhotoW; photoH = photoW * imgRatio;
+                if (photoH > maxPhotoH) { photoH = maxPhotoH; photoW = photoH / imgRatio; }
+                
+                photoX = 15 + (maxPhotoW - photoW) / 2; photoY = 35;
+                
+                const availableH = 297 - 10 - (photoY + photoH + 8); 
+                mapSize = Math.min(maxPhotoW - listWidthPortrait - 5, availableH);
+                
+                mapX = 15; mapY = photoY + photoH + 8;
+                listX = mapX + mapSize + 8; listY = mapY;
+            }
+
+            // --- DESSIN DES CADRES ET IMAGES ---
+            doc.setDrawColor(148, 163, 184); doc.setLineWidth(0.3);
+            doc.rect(photoX, photoY, photoW, photoH);
+            doc.addImage(mainImgData, 'JPEG', photoX, photoY, photoW, photoH);
+
+            doc.rect(mapX, mapY, mapSize, mapSize);
+            doc.addImage(mapImgData, 'JPEG', mapX, mapY, mapSize, mapSize);
+
+            // --- STATISTIQUES ET ROSTER ---
+            doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(30, 41, 59);
+            const passes = state.trajectories.filter(t => t.type === 'pass').length;
+            const courses = state.trajectories.filter(t => t.type === 'run').length;
+            
+            doc.text(`Analyse : ${passes} Passe(s) | ${courses} Course(s)`, listX, listY);
+            
+            let startY = listY + 8;
+            const teamA_players = state.playersOnPitch.filter(p => p.team === 'A');
+            const teamB_players = state.playersOnPitch.filter(p => p.team === 'B');
+
+            if (isPhotoPortrait) {
+                // ==========================================
+                // MODE 4 COLONNES (Export Paysage - Sous la minimap)
+                // ==========================================
+                // On divise l'espace droit disponible en 4 parts égales
+                const colW = rightSectionW / 4; 
+                const col1X = listX;
+                const col2X = listX + colW;
+                const col3X = listX + colW * 2; 
+                const col4X = listX + colW * 3;
+
+                doc.setFontSize(10);
+                
+                // ÉQUIPE A (Colonnes 1 et 2)
+                doc.setFont("helvetica", "bold"); doc.setTextColor(state.teams.A.color);
+                doc.text(state.teams.A.name, col1X, startY);
+                let cyA1 = startY + 5, cyA2 = startY + 5;
+                doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+                
+                if (teamA_players.length === 0) doc.text("- Aucun -", col1X, cyA1);
+                teamA_players.forEach((p, idx) => {
+                    // Alternance entre la colonne 1 et 2
+                    if (idx % 2 === 0) { doc.text(`• #${p.num} - ${p.role.substring(0,10)}`, col1X, cyA1); cyA1 += 4.5; } 
+                    else { doc.text(`• #${p.num} - ${p.role.substring(0,10)}`, col2X, cyA2); cyA2 += 4.5; }
+                });
+
+                // ÉQUIPE B (Colonnes 3 et 4)
+                doc.setFont("helvetica", "bold"); doc.setTextColor(state.teams.B.color); doc.setFontSize(10);
+                doc.text(state.teams.B.name, col3X, startY);
+                let cyB1 = startY + 5, cyB2 = startY + 5;
+                doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+                
+                if (teamB_players.length === 0) doc.text("- Aucun -", col3X, cyB1);
+                teamB_players.forEach((p, idx) => {
+                    // Alternance entre la colonne 3 et 4
+                    if (idx % 2 === 0) { doc.text(`• #${p.num} - ${p.role.substring(0,10)}`, col3X, cyB1); cyB1 += 4.5; } 
+                    else { doc.text(`• #${p.num} - ${p.role.substring(0,10)}`, col4X, cyB2); cyB2 += 4.5; }
+                });
+
+            } else {
+                // ==========================================
+                // MODE 1 COLONNE (Export Portrait - À côté de la minimap)
+                // ==========================================
+                let currentY = startY;
+
+                // ÉQUIPE A
+                doc.setFont("helvetica", "bold"); doc.setTextColor(state.teams.A.color); doc.setFontSize(10);
+                doc.text(state.teams.A.name, listX, currentY); currentY += 5; 
+                doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+                
+                if (teamA_players.length === 0) { doc.text("- Aucun -", listX, currentY); currentY += 5; } 
+                else { teamA_players.forEach(p => { doc.text(`• #${p.num} - ${p.role}`, listX, currentY); currentY += 4.5; }); }
+
+                currentY += 3;
+
+                // ÉQUIPE B
+                doc.setFont("helvetica", "bold"); doc.setTextColor(state.teams.B.color); doc.setFontSize(10);
+                doc.text(state.teams.B.name, listX, currentY); currentY += 5; 
+                doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+                
+                if (teamB_players.length === 0) { doc.text("- Aucun -", listX, currentY); currentY += 5; } 
+                else { teamB_players.forEach(p => { doc.text(`• #${p.num} - ${p.role}`, listX, currentY); currentY += 4.5; }); }
+            }
+
+            // Lancer le téléchargement
+            doc.save(`Analyse_Tactique_${state.teams.A.name}_vs_${state.teams.B.name}.pdf`);
+        });
+
+        
     </script>
 </body>
 </html>
-
-
